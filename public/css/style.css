@@ -195,6 +195,16 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
 .chat-form { display: flex; gap: .6rem; }
 .chat-form input { flex-grow: 1; }
 
+/* ESTADISTICAS */
+.estadisticas-gif {
+  display: block;
+  max-width: 320px;
+  width: 100%;
+  margin: 1rem auto 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
 /* JORNADA */
 .empty-state {
   background: var(--card);
