@@ -167,6 +167,7 @@
       $('#jornada-titulo').textContent = `Jornada ${data.jornada.numero}` + (data.jornada.temporada ? ` (${data.jornada.temporada})` : '');
       pintarTablaJornada(data.partidos);
       pintarEstado(data.estado);
+      pintarResultadosDeTodos(data.usuarios, data.partidos);
       $('#jornada-tabla-wrap').hidden = false;
       mostrarEditorJornada(false);
       prepararEditorVacio();
@@ -278,6 +279,29 @@
     });
   }
 
+  function pintarResultadosDeTodos(usuarios, partidos) {
+    const cabecera = $('#resultados-todos-cabecera');
+    const cuerpo = $('#resultados-todos-cuerpo');
+
+    cabecera.innerHTML = `
+      <tr>
+        <th>Partido</th>
+        ${usuarios.map((u) => `<th>${escapeHtml(u)}</th>`).join('')}
+      </tr>
+    `;
+
+    cuerpo.innerHTML = partidos.map((p) => {
+      const etiqueta = (p.es_pleno ? 'Pleno al 15: ' : '') + `${escapeHtml(p.equipo_local)} - ${escapeHtml(p.equipo_visitante)}`;
+      const celdas = usuarios.map((u) => {
+        const valor = (p.predicciones && p.predicciones[u]) || '';
+        return valor
+          ? `<td class="valor-relleno">${escapeHtml(valor)}</td>`
+          : `<td class="valor-vacio">—</td>`;
+      }).join('');
+      return `<tr><td>${etiqueta}</td>${celdas}</tr>`;
+    }).join('');
+  }
+
   $('#btn-guardar-predicciones').addEventListener('click', async () => {
     if (!jornadaActualId) return;
     const predicciones = {};
@@ -305,7 +329,10 @@
       $('#guardar-ok').hidden = false;
       setTimeout(() => ($('#guardar-ok').hidden = true), 2000);
       const data = await api('/api/jornada/current');
-      if (data.jornada) pintarEstado(data.estado);
+      if (data.jornada) {
+        pintarEstado(data.estado);
+        pintarResultadosDeTodos(data.usuarios, data.partidos);
+      }
     } catch (err) {
       alert(err.message);
     }

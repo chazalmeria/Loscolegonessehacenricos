@@ -25,6 +25,22 @@ async function getPrediccionesDe(username, jornadaId) {
   );
 }
 
+async function getPrediccionesDeTodos(jornadaId) {
+  const filas = await db.all(
+    `SELECT pr.partido_id as partido_id, pr.username, pr.pronostico
+     FROM predicciones pr
+     JOIN partidos p ON p.id = pr.partido_id
+     WHERE p.jornada_id = ?`,
+    [jornadaId]
+  );
+  const mapa = {};
+  for (const fila of filas) {
+    if (!mapa[fila.partido_id]) mapa[fila.partido_id] = {};
+    mapa[fila.partido_id][fila.username] = fila.pronostico;
+  }
+  return mapa;
+}
+
 async function estadoDeTodos(jornadaId) {
   const totalRow = await db.get('SELECT COUNT(*) as n FROM partidos WHERE jornada_id = ?', [jornadaId]);
   const total = totalRow.n;
@@ -52,11 +68,17 @@ router.get('/current', requireAuth, async (req, res, next) => {
     const partidos = await getPartidos(jornada.id);
     const misPredicciones = await getPrediccionesDe(req.username, jornada.id);
     const mapa = Object.fromEntries(misPredicciones.map((p) => [p.partido_id, p.pronostico]));
-    const partidosConMiPronostico = partidos.map((p) => ({ ...p, mi_pronostico: mapa[p.id] || '' }));
+    const prediccionesDeTodos = await getPrediccionesDeTodos(jornada.id);
+    const partidosConMiPronostico = partidos.map((p) => ({
+      ...p,
+      mi_pronostico: mapa[p.id] || '',
+      predicciones: prediccionesDeTodos[p.id] || {},
+    }));
 
     res.json({
       jornada,
       partidos: partidosConMiPronostico,
+      usuarios: USERS,
       estado: await estadoDeTodos(jornada.id),
     });
   } catch (err) {
