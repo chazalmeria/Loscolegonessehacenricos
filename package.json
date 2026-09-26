@@ -1,0 +1,22 @@
+{
+  "name": "quiniela-colegas",
+  "version": "1.0.0",
+  "description": "App privada para colegas y useros: chat, quiniela semanal, historial de predicciones y estadisticas.",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "socket.io": "^4.8.1"
+  }
+}

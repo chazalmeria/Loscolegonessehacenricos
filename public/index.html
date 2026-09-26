@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>La Quiniela de los Colegas</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- PORTADA -->
+  <section id="screen-portada" class="screen screen-portada">
+    <div class="portada-content">
+      <h1>Si no eres colegón o eres usero,<br />no eres bienvenido</h1>
+      <button id="btn-ir-login" class="btn btn-primary btn-lg">Login</button>
+    </div>
+  </section>
+
+  <!-- LOGIN -->
+  <section id="screen-login" class="screen screen-login" hidden>
+    <form id="form-login" class="login-card">
+      <h2>Entrar</h2>
+      <label>
+        Usuario
+        <select id="login-username" required>
+          <option value="" disabled selected>Elige tu nombre</option>
+        </select>
+      </label>
+      <label>
+        Contraseña
+        <input id="login-password" type="password" placeholder="Contraseña" required />
+      </label>
+      <p id="login-error" class="error-msg" hidden></p>
+      <div class="login-actions">
+        <button type="button" id="btn-volver-portada" class="btn btn-ghost">Volver</button>
+        <button type="submit" class="btn btn-primary">Entrar</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- APP (HOME) -->
+  <section id="screen-home" class="screen screen-home" hidden>
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo">⚽ Quiniela</span>
+        <span id="usuario-actual" class="usuario-actual"></span>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="inicio">Inicio</button>
+        <button class="nav-item" data-tab="jornada">Jornada</button>
+        <button class="nav-item" data-tab="historial">Historial</button>
+        <button class="nav-item" data-tab="estadisticas">Estadisticas</button>
+      </nav>
+      <button id="btn-logout" class="btn btn-ghost btn-logout">Cerrar sesión</button>
+    </aside>
+
+    <main class="content">
+
+      <!-- INICIO: CHAT -->
+      <div id="tab-inicio" class="tab-panel active">
+        <h2>Inicio</h2>
+        <div id="chat-messages" class="chat-messages"></div>
+        <form id="form-chat" class="chat-form">
+          <input id="chat-input" type="text" maxlength="1000" placeholder="Escribe algo..." autocomplete="off" />
+          <button type="submit" class="btn btn-primary">Enviar</button>
+        </form>
+      </div>
+
+      <!-- JORNADA -->
+      <div id="tab-jornada" class="tab-panel">
+        <div class="tab-header-row">
+          <h2 id="jornada-titulo">Jornada</h2>
+          <button id="btn-toggle-editor-jornada" class="btn btn-ghost btn-small">Editar partidos</button>
+        </div>
+
+        <div id="jornada-sin-datos" class="empty-state" hidden>
+          <p>Todavía no se ha cargado ninguna jornada. Puedes introducir los partidos manualmente.</p>
+        </div>
+
+        <form id="form-jornada-editor" class="jornada-editor" hidden>
+          <label>
+            Número de jornada
+            <input id="jornada-numero" type="text" placeholder="Ej: 5" />
+          </label>
+          <label>
+            Temporada (opcional)
+            <input id="jornada-temporada" type="text" placeholder="Ej: 2026/2027" />
+          </label>
+          <div id="jornada-editor-partidos" class="jornada-editor-partidos"></div>
+          <fieldset class="pleno-editor">
+            <legend>Pleno al 15</legend>
+            <input id="pleno-local" type="text" placeholder="Equipo local" />
+            <input id="pleno-visitante" type="text" placeholder="Equipo visitante" />
+          </fieldset>
+          <button type="submit" class="btn btn-primary">Guardar jornada</button>
+        </form>
+
+        <div id="jornada-tabla-wrap" hidden>
+          <table class="jornada-tabla">
+            <thead>
+              <tr><th>#</th><th>Partido</th><th>1</th><th>X</th><th>2</th></tr>
+            </thead>
+            <tbody id="jornada-tabla-body"></tbody>
+          </table>
+          <div id="pleno-form" class="pleno-form"></div>
+          <button id="btn-guardar-predicciones" class="btn btn-primary">Guardar mis pronósticos</button>
+          <p id="guardar-ok" class="ok-msg" hidden>¡Guardado!</p>
+
+          <h3>¿Quién ha rellenado ya?</h3>
+          <ul id="jornada-estado" class="estado-lista"></ul>
+        </div>
+      </div>
+
+      <!-- HISTORIAL -->
+      <div id="tab-historial" class="tab-panel">
+        <h2>Historial</h2>
+        <div id="historial-tabs" class="user-tabs"></div>
+        <div id="historial-contenido"></div>
+      </div>
+
+      <!-- ESTADISTICAS -->
+      <div id="tab-estadisticas" class="tab-panel">
+        <h2>Estadísticas</h2>
+        <div class="empty-state">
+          <p>Próximamente 📊</p>
+        </div>
+      </div>
+
+    </main>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
