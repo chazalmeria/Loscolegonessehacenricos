@@ -40,13 +40,7 @@ Abre `http://localhost:3000` en el navegador. La base de datos (`data/quiniela.d
 
 ## 2. Subirlo a tu cuenta de GitHub
 
-Desde la carpeta del proyecto:
-
-```bash
-git init
-git add .
-git commit -m "Primera version de la Quiniela de los Colegas"
-```
+El proyecto que te he pasado ya trae un repositorio Git inicializado y con el primer commit hecho (carpeta `.git` incluida), así que no hace falta que hagas `git init` ni `git commit`: solo te falta conectarlo con GitHub y empujarlo (`git push`).
 
 Crea el repositorio vacío en GitHub (sustituye `TU-USUARIO` y el nombre que quieras):
 
