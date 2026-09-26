@@ -57,24 +57,24 @@ Si no tienes aún el repositorio vacío creado en GitHub: entra en https://githu
 
 Vercel no tiene disco persistente, así que la base de datos tiene que vivir fuera, en Turso (tiene plan gratuito de sobra para esto).
 
+### Opción A — Desde el navegador, sin instalar nada (recomendada, sobre todo en Windows)
+
+1. Entra en https://app.turso.tech/signup y crea una cuenta (puedes usar tu GitHub).
+2. Crea una base de datos nueva (botón "Create Database"), llámala por ejemplo `quiniela-colegas`.
+3. Dentro de la base de datos, busca su **URL de conexión** (empieza por `libsql://...`) — apúntala.
+4. Busca la opción de **crear un token / access token** para esa base de datos y genera uno — apúntalo también (normalmente solo se muestra una vez).
+
+### Opción B — Por terminal, con el CLI (Mac/Linux; en Windows hazlo desde WSL)
+
 ```bash
-# Instalar el CLI de turso (Mac/Linux; en Windows hazlo desde WSL)
 curl -sSfL https://get.tur.so/install.sh | bash
-
-# Iniciar sesión (abre el navegador)
 turso auth login
-
-# Crear la base de datos
 turso db create quiniela-colegas
-
-# Obtener la URL de conexión (empieza por libsql://...) — apunta este valor
-turso db show quiniela-colegas --url
-
-# Crear un token de acceso — apunta este valor tambien (solo se muestra una vez)
-turso db tokens create quiniela-colegas
+turso db show quiniela-colegas --url        # esto es TURSO_DATABASE_URL
+turso db tokens create quiniela-colegas     # esto es TURSO_AUTH_TOKEN
 ```
 
-Guarda esos dos valores: la URL es `TURSO_DATABASE_URL` y el token es `TURSO_AUTH_TOKEN`.
+Con cualquiera de las dos opciones, te quedas con dos valores: la URL (`TURSO_DATABASE_URL`) y el token (`TURSO_AUTH_TOKEN`).
 
 ## 4. Desplegar en Vercel
 
