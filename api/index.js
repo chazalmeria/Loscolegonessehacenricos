@@ -1,0 +1,3 @@
+// Punto de entrada para Vercel: expone la app de Express como funcion serverless.
+// vercel.json redirige aqui todas las peticiones que empiezan por /api/...
+module.exports = require('../server/app');

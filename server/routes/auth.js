@@ -1,5 +1,5 @@
 const express = require('express');
-const { checkCredentials, USERS } = require('../auth');
+const { checkCredentials, setSessionCookie, clearSessionCookie, USERS } = require('../auth');
 
 const router = express.Router();
 
@@ -13,19 +13,18 @@ router.post('/login', (req, res) => {
   if (!checkCredentials(username, password)) {
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   }
-  req.session.username = username;
+  setSessionCookie(res, username);
   res.json({ ok: true, username });
 });
 
 router.post('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.json({ ok: true });
-  });
+  clearSessionCookie(res);
+  res.json({ ok: true });
 });
 
 router.get('/me', (req, res) => {
-  if (req.session && req.session.username) {
-    return res.json({ username: req.session.username });
+  if (req.username) {
+    return res.json({ username: req.username });
   }
   res.status(401).json({ error: 'No has iniciado sesion' });
 });

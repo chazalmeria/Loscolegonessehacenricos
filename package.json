@@ -1,11 +1,11 @@
 {
   "name": "quiniela-colegas",
   "version": "1.0.0",
-  "description": "App privada para colegas y useros: chat, quiniela semanal, historial de predicciones y estadisticas.",
+  "description": "App privada para colegas y useros: chat, quiniela semanal, historial de predicciones y estadisticas. Preparada para desplegar en Vercel con Turso.",
   "main": "server/index.js",
   "type": "commonjs",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=18.18.0"
   },
   "scripts": {
     "start": "node server/index.js",
@@ -13,10 +13,10 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@libsql/client": "^0.15.14",
     "bcryptjs": "^2.4.3",
+    "cookie": "^0.7.2",
     "dotenv": "^16.4.5",
-    "express": "^4.21.2",
-    "express-session": "^1.18.1",
-    "socket.io": "^4.8.1"
+    "express": "^4.21.2"
   }
 }

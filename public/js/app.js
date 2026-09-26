@@ -11,7 +11,8 @@
   };
 
   let currentUser = null;
-  let socket = null;
+  let chatPollHandle = null;
+  let ultimoMensajeId = 0;
 
   function showScreen(name) {
     Object.values(screens).forEach((s) => (s.hidden = true));
@@ -76,7 +77,7 @@
   $('#btn-logout').addEventListener('click', async () => {
     await api('/api/auth/logout', { method: 'POST' });
     currentUser = null;
-    if (socket) { socket.disconnect(); socket = null; }
+    detenerSondeoChat();
     $('#login-password').value = '';
     showScreen('portada');
   });
@@ -85,8 +86,10 @@
   function entrarEnApp() {
     $('#usuario-actual').textContent = currentUser;
     showScreen('home');
-    conectarChat();
+    ultimoMensajeId = 0;
+    $('#chat-messages').innerHTML = '';
     cargarChat();
+    iniciarSondeoChat();
     cargarJornada();
     cargarHistorial();
   }
@@ -101,7 +104,7 @@
     });
   });
 
-  // ---------- CHAT ----------
+  // ---------- CHAT (sondeo periodico, sin websockets: compatible con Vercel) ----------
   function pintarMensaje(msg) {
     const div = document.createElement('div');
     div.className = 'chat-msg' + (msg.username === currentUser ? ' mio' : '');
@@ -111,20 +114,26 @@
     div.innerHTML = `<span class="autor">${escapeHtml(msg.username)}<span class="hora">${hora}</span></span>${escapeHtml(msg.text)}`;
     $('#chat-messages').appendChild(div);
     $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+    if (msg.id > ultimoMensajeId) ultimoMensajeId = msg.id;
   }
 
   async function cargarChat() {
     try {
-      const { messages } = await api('/api/chat/messages');
-      $('#chat-messages').innerHTML = '';
+      const { messages } = await api(`/api/chat/messages?since=${ultimoMensajeId}`);
       messages.forEach(pintarMensaje);
     } catch (e) { /* ignore */ }
   }
 
-  function conectarChat() {
-    if (socket) return;
-    socket = io();
-    socket.on('chat:new-message', (msg) => pintarMensaje(msg));
+  function iniciarSondeoChat() {
+    detenerSondeoChat();
+    chatPollHandle = setInterval(cargarChat, 4000);
+  }
+
+  function detenerSondeoChat() {
+    if (chatPollHandle) {
+      clearInterval(chatPollHandle);
+      chatPollHandle = null;
+    }
   }
 
   $('#form-chat').addEventListener('submit', async (e) => {
@@ -134,7 +143,8 @@
     if (!text) return;
     input.value = '';
     try {
-      await api('/api/chat/messages', { method: 'POST', body: JSON.stringify({ text }) });
+      const { message } = await api('/api/chat/messages', { method: 'POST', body: JSON.stringify({ text }) });
+      if (message) pintarMensaje(message);
     } catch (e) { /* ignore */ }
   });
 
