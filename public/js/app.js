@@ -165,13 +165,20 @@
       jornadaActualId = data.jornada.id;
       $('#jornada-sin-datos').hidden = true;
       $('#jornada-titulo').textContent = `Jornada ${data.jornada.numero}` + (data.jornada.temporada ? ` (${data.jornada.temporada})` : '');
-      pintarTablaJornada(data.partidos);
-      pintarEstado(data.estado);
-      pintarResultadosDeTodos(data.usuarios, data.partidos);
+      pintarTablaJornada(data.partidos || []);
+      pintarEstado(data.estado || []);
+      // Aislado en su propio try/catch: si esto fallase, no debe tumbar el resto de la pestaña Jornada.
+      try {
+        pintarResultadosDeTodos(data.usuarios || [], data.partidos || []);
+      } catch (e) {
+        console.error('No se pudo pintar "Resultados de todos":', e);
+      }
       $('#jornada-tabla-wrap').hidden = false;
       mostrarEditorJornada(false);
       prepararEditorVacio();
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      console.error('Error cargando la jornada:', e);
+    }
   }
 
   function mostrarEditorJornada(forzarVisible) {
@@ -330,54 +337,82 @@
       setTimeout(() => ($('#guardar-ok').hidden = true), 2000);
       const data = await api('/api/jornada/current');
       if (data.jornada) {
-        pintarEstado(data.estado);
-        pintarResultadosDeTodos(data.usuarios, data.partidos);
+        pintarEstado(data.estado || []);
+        try {
+          pintarResultadosDeTodos(data.usuarios || [], data.partidos || []);
+        } catch (e) {
+          console.error('No se pudo pintar "Resultados de todos":', e);
+        }
       }
     } catch (err) {
       alert(err.message);
     }
   });
 
-  // ---------- HISTORIAL ----------
+  // ---------- HISTORIAL (una pestaña por jornada cerrada, con la tabla de Resultados de todos) ----------
   async function cargarHistorial() {
     try {
-      const { usuarios, historial } = await api('/api/historial');
+      const { usuarios, jornadas } = await api('/api/historial');
       const tabsWrap = $('#historial-tabs');
       tabsWrap.innerHTML = '';
-      usuarios.forEach((u, idx) => {
+
+      if (!jornadas || jornadas.length === 0) {
+        $('#historial-contenido').innerHTML =
+          '<div class="empty-state"><p>Todavía no hay jornadas cerradas en el historial. En cuanto se cargue una jornada nueva, la anterior aparecerá aquí.</p></div>';
+        return;
+      }
+
+      jornadas.forEach((j, idx) => {
         const btn = document.createElement('button');
-        btn.textContent = u;
+        btn.textContent = `Jornada ${j.numero}`;
         if (idx === 0) btn.classList.add('active');
         btn.addEventListener('click', () => {
           $$('#historial-tabs button').forEach((b) => b.classList.remove('active'));
           btn.classList.add('active');
-          pintarHistorialUsuario(historial[u]);
+          pintarHistorialJornada(usuarios, j);
         });
         tabsWrap.appendChild(btn);
       });
-      if (usuarios.length) pintarHistorialUsuario(historial[usuarios[0]]);
-    } catch (e) { /* ignore */ }
+
+      pintarHistorialJornada(usuarios, jornadas[0]);
+    } catch (e) {
+      console.error('Error cargando el historial:', e);
+    }
   }
 
-  function pintarHistorialUsuario(jornadas) {
+  function pintarHistorialJornada(usuarios, jornada) {
     const cont = $('#historial-contenido');
-    cont.innerHTML = '';
-    if (!jornadas || jornadas.length === 0) {
+    if (!jornada) {
       cont.innerHTML = '<div class="empty-state"><p>Todavía no hay jornadas cerradas en el historial.</p></div>';
       return;
     }
-    jornadas.forEach((j) => {
-      const div = document.createElement('div');
-      div.className = 'historial-jornada';
-      const filas = j.partidos.map((p) => `
-        <tr>
-          <td>${p.es_pleno ? 'Pleno al 15: ' : ''}${escapeHtml(p.equipo_local)} - ${escapeHtml(p.equipo_visitante)}</td>
-          <td class="pronostico">${p.pronostico ? escapeHtml(p.pronostico) : '—'}</td>
-        </tr>
-      `).join('');
-      div.innerHTML = `<h4>Jornada ${escapeHtml(j.numero)}${j.temporada ? ` (${escapeHtml(j.temporada)})` : ''}</h4><table>${filas}</table>`;
-      cont.appendChild(div);
-    });
+
+    const cabecera = `
+      <tr>
+        <th>Partido</th>
+        ${usuarios.map((u) => `<th>${escapeHtml(u)}</th>`).join('')}
+      </tr>
+    `;
+    const cuerpo = jornada.partidos.map((p) => {
+      const etiqueta = (p.es_pleno ? 'Pleno al 15: ' : '') + `${escapeHtml(p.equipo_local)} - ${escapeHtml(p.equipo_visitante)}`;
+      const celdas = usuarios.map((u) => {
+        const valor = (p.predicciones && p.predicciones[u]) || '';
+        return valor
+          ? `<td class="valor-relleno">${escapeHtml(valor)}</td>`
+          : `<td class="valor-vacio">—</td>`;
+      }).join('');
+      return `<tr><td>${etiqueta}</td>${celdas}</tr>`;
+    }).join('');
+
+    cont.innerHTML = `
+      <h3>Jornada ${escapeHtml(jornada.numero)}${jornada.temporada ? ` (${escapeHtml(jornada.temporada)})` : ''}</h3>
+      <div class="resultados-todos-tabla-scroll">
+        <table class="resultados-todos-tabla">
+          <thead>${cabecera}</thead>
+          <tbody>${cuerpo}</tbody>
+        </table>
+      </div>
+    `;
   }
 
   // ---------- UTIL ----------
