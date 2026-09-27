@@ -1,12 +1,12 @@
-const { createClient } = require('@libsql/client');
-
 // Base de datos: Turso (SQLite alojado, compatible con Vercel).
 // En local, si no defines TURSO_DATABASE_URL, se usa un archivo SQLite en disco
 // (data/quiniela.db) gracias a que libSQL entiende URLs "file:...".
-const client = createClient({
-  url: process.env.TURSO_DATABASE_URL || 'file:./data/quiniela.db',
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
+//
+// IMPORTANTE: tanto el require('@libsql/client') como la conexion se hacen de
+// forma perezosa (dentro de ready(), no aqui arriba). Si algo falla al conectar
+// (URL mal copiada, token invalido, etc.) queremos que sea un error normal que
+// Express pueda capturar y convertir en una respuesta JSON, no un fallo que
+// tumbe toda la funcion serverless antes de que nada pueda reaccionar.
 
 const USERS = ['Burgos', 'Paquero', 'Jordan', 'Pepe', 'Largo', 'Joaquin', 'Miguel'];
 
@@ -46,21 +46,49 @@ const SCHEMA = [
   )`,
 ];
 
+let client = null;
 let readyPromise = null;
 
+function describirConfiguracion() {
+  const url = process.env.TURSO_DATABASE_URL || 'file:./data/quiniela.db';
+  const tieneToken = !!process.env.TURSO_AUTH_TOKEN;
+  // Nunca imprimimos el token, solo si existe y cuantos caracteres tiene (para detectar cortes al copiar).
+  return `url=${url} | TURSO_AUTH_TOKEN presente=${tieneToken} (${
+    process.env.TURSO_AUTH_TOKEN ? process.env.TURSO_AUTH_TOKEN.length : 0
+  } caracteres)`;
+}
+
 // Se llama al principio de cada peticion (ver server/app.js). La primera vez
-// crea las tablas y siembra los usuarios; las siguientes es casi gratis
-// porque readyPromise ya esta resuelta (se reutiliza mientras la funcion
-// serverless siga "caliente").
+// crea el cliente, crea las tablas y siembra los usuarios; las siguientes es
+// casi gratis porque readyPromise ya esta resuelta (se reutiliza mientras la
+// funcion serverless siga "caliente").
 function ready() {
   if (!readyPromise) {
     readyPromise = (async () => {
-      await client.batch(SCHEMA, 'write');
-      for (const u of USERS) {
-        await client.execute({
-          sql: 'INSERT OR IGNORE INTO users (username, display_name) VALUES (?, ?)',
-          args: [u, u],
+      try {
+        const { createClient } = require('@libsql/client');
+        client = createClient({
+          url: process.env.TURSO_DATABASE_URL || 'file:./data/quiniela.db',
+          authToken: process.env.TURSO_AUTH_TOKEN,
         });
+
+        await client.batch(SCHEMA, 'write');
+        for (const u of USERS) {
+          await client.execute({
+            sql: 'INSERT OR IGNORE INTO users (username, display_name) VALUES (?, ?)',
+            args: [u, u],
+          });
+        }
+      } catch (err) {
+        console.error('[db] Fallo al conectar/inicializar la base de datos.', describirConfiguracion());
+        console.error(err);
+        // Reseteamos para que el siguiente intento (proxima peticion) vuelva a probar
+        // en vez de quedarse atascado con una promesa ya rechazada para siempre.
+        readyPromise = null;
+        client = null;
+        const wrapped = new Error(`No se pudo conectar con la base de datos (Turso). Detalle: ${err.message}`);
+        wrapped.cause = err;
+        throw wrapped;
       }
     })();
   }
@@ -72,6 +100,7 @@ function toPlainRow(row) {
 }
 
 async function run(sql, args = []) {
+  await ready();
   const res = await client.execute({ sql, args });
   return {
     lastInsertRowid:
@@ -83,11 +112,13 @@ async function run(sql, args = []) {
 }
 
 async function get(sql, args = []) {
+  await ready();
   const res = await client.execute({ sql, args });
   return toPlainRow(res.rows[0]);
 }
 
 async function all(sql, args = []) {
+  await ready();
   const res = await client.execute({ sql, args });
   return res.rows.map(toPlainRow);
 }
@@ -95,6 +126,7 @@ async function all(sql, args = []) {
 // Transaccion interactiva: fn recibe un objeto {run, get, all} que ejecuta
 // dentro de la misma transaccion, y se hace commit/rollback automaticamente.
 async function tx(fn) {
+  await ready();
   const t = await client.transaction('write');
   const scoped = {
     run: async (sql, args = []) => {

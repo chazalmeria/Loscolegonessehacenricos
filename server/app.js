@@ -38,11 +38,17 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
-// Manejo de errores centralizado
+// Manejo de errores centralizado.
+// Incluimos el mensaje del error en la respuesta (no solo en los logs de Vercel):
+// esto es una app privada para un grupo de colegas, así que preferimos poder
+// diagnosticar abriendo la URL en el navegador antes que ocultar el detalle.
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ error: 'Error interno del servidor' });
+  res.status(500).json({
+    error: 'Error interno del servidor',
+    detalle: err && err.message,
+  });
 });
 
 module.exports = app;
