@@ -130,7 +130,7 @@ router.post('/:id/archivar', requireAuth, async (req, res, next) => {
 });
 
 // Poner (o corregir) a mano el resultado real de los partidos de una jornada
-// abierta, por si la API va con retraso. Body: { resultados: { partidoId: valor } }
+// (abierta o ya en el Historial), por si la API va con retraso. Body: { resultados: { partidoId: valor } }
 // con valor "1"/"X"/"2" (o "2-1" en el Pleno al 15). Un valor vacio borra el
 // resultado y deja que lo vuelva a rellenar la API.
 router.post('/:id/resultados', requireAuth, async (req, res, next) => {
@@ -140,8 +140,8 @@ router.post('/:id/resultados', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Formato invalido' });
     }
 
-    const jornada = await db.get('SELECT id FROM jornadas WHERE id = ? AND activa = 1', [Number(req.params.id)]);
-    if (!jornada) return res.status(400).json({ error: 'Esa jornada ya no está abierta' });
+    const jornada = await db.get('SELECT id FROM jornadas WHERE id = ?', [Number(req.params.id)]);
+    if (!jornada) return res.status(404).json({ error: 'Esa jornada no existe' });
 
     const partidos = new Map((await getPartidos(jornada.id)).map((p) => [p.id, p]));
     const cambios = [];

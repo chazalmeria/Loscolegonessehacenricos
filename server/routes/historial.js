@@ -42,6 +42,7 @@ router.get('/', requireAuth, async (req, res, next) => {
         temporada: jornada.temporada,
         manual: !!jornada.manual,
         partidos: partidos.map((p) => ({
+          id: p.id,
           equipo_local: p.equipo_local,
           equipo_visitante: p.equipo_visitante,
           es_pleno: !!p.es_pleno,

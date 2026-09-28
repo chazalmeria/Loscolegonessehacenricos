@@ -210,7 +210,7 @@
       <li class="${u.completado ? 'completado' : ''}">${escapeHtml(u.username)}: ${u.rellenados}/${u.total}${u.completado ? ' ✓' : ''}</li>
     `).join('');
 
-    bloquesJornada.set(jornada.id, { jornada, partidos, estado });
+    bloquesJornada.set(jornada.id, { jornada, partidos, estado, usuarios: usuariosJornada });
 
     return `
       <section class="jornada-bloque${jornada.manual ? ' jornada-bloque-manual' : ''}" data-jornada-id="${jornada.id}">
@@ -231,23 +231,24 @@
         <h4>¿Quién ha rellenado ya?</h4>
         <ul class="estado-lista">${estadoHtml}</ul>
 
-        ${htmlResultadosDeTodos(jornada, partidos)}
+        ${htmlResultadosDeTodos(jornada, partidos, usuariosJornada)}
       </section>
     `;
   }
 
-  // "Resultados de todos" de un bloque. Se repinta por separado al entrar o
-  // salir del modo "Poner resultados", para no perder pronosticos sin guardar.
-  function htmlResultadosDeTodos(jornada, partidos) {
+  // "Resultados de todos" de un bloque (en Jornada o en Historial). Se repinta
+  // por separado al entrar o salir del modo "Poner resultados", para no perder
+  // pronosticos sin guardar.
+  function htmlResultadosDeTodos(jornada, partidos, usuarios) {
     const editable = editandoResultados.has(jornada.id);
-    const tabla = htmlTablaResultados(usuariosJornada, partidos, {
+    const tabla = htmlTablaResultados(usuarios, partidos, {
       editable,
       conColumnaResultado: editable || !jornada.manual || partidos.some((p) => p.resultado),
     });
 
     let hint = 'Lo que ha puesto cada uno. En verde los aciertos y en rojo los fallos, según se van conociendo los resultados.';
     if (editable) {
-      hint = 'Pon el signo de cada partido ya jugado (y los goles del Pleno al 15). Deja en blanco lo que no sepas. La API no cambia lo que pongáis a mano; si lo borras, lo volverá a rellenar ella.';
+      hint = 'Pon el signo de cada partido ya jugado (y los goles del Pleno al 15: un número o M si son 3 o más). Deja en blanco lo que no sepas. La API no cambia lo que pongáis a mano; si lo borras, lo volverá a rellenar ella.';
     } else if (partidos.some((p) => p.resultado_manual)) {
       hint += ' Los marcados con * los ha puesto alguien a mano.';
     }
@@ -278,9 +279,20 @@
   }
 
   function repintarResultados(bloque, jornadaId) {
-    const datos = bloquesJornada.get(jornadaId);
+    const datos = bloquesJornada.get(jornadaId) || jornadasHistorial.get(jornadaId);
     if (!datos) return;
-    bloque.querySelector('.resultados-todos-wrap').outerHTML = htmlResultadosDeTodos(datos.jornada, datos.partidos);
+    bloque.querySelector('.resultados-todos-wrap').outerHTML =
+      htmlResultadosDeTodos(datos.jornada, datos.partidos, datos.usuarios);
+  }
+
+  // Botones de "Poner resultados" (valen en Jornada y en Historial)
+  async function accionResultados(accion, bloque, jornadaId) {
+    if (accion === 'poner-resultados' || accion === 'cancelar-resultados') {
+      if (accion === 'poner-resultados') editandoResultados.add(jornadaId);
+      else editandoResultados.delete(jornadaId);
+      repintarResultados(bloque, jornadaId);
+    }
+    if (accion === 'guardar-resultados') await guardarResultados(bloque, jornadaId);
   }
 
   // Botones de cada bloque (Guardar / Añadir al historico / Poner resultados)
@@ -292,12 +304,7 @@
     const accion = boton.dataset.accion;
     if (accion === 'guardar') await guardarPronosticos(bloque, jornadaId);
     if (accion === 'archivar') await archivarJornada(bloque, jornadaId);
-    if (accion === 'poner-resultados' || accion === 'cancelar-resultados') {
-      if (accion === 'poner-resultados') editandoResultados.add(jornadaId);
-      else editandoResultados.delete(jornadaId);
-      repintarResultados(bloque, jornadaId);
-    }
-    if (accion === 'guardar-resultados') await guardarResultados(bloque, jornadaId);
+    await accionResultados(accion, bloque, jornadaId);
   });
 
   async function guardarResultados(bloque, jornadaId) {
@@ -307,13 +314,21 @@
     });
     const pleno = bloque.querySelector('[data-res-pleno]');
     if (pleno) {
-      const gl = pleno.querySelector('[data-res-goles="local"]').value.trim();
-      const gv = pleno.querySelector('[data-res-goles="visitante"]').value.trim();
+      // Goles de cada equipo: un numero o "M" (3 o mas)
+      const leer = (lado) => pleno.querySelector(`[data-res-goles="${lado}"]`).value.trim().toUpperCase();
+      const gl = leer('local');
+      const gv = leer('visitante');
       if ((gl === '') !== (gv === '')) {
         alert('En el Pleno al 15 pon los goles de los dos equipos (o deja los dos en blanco).');
         return;
       }
-      resultados[pleno.dataset.resPleno] = gl === '' ? '' : `${Number(gl)}-${Number(gv)}`;
+      const valido = (g) => g === 'M' || /^\d{1,2}$/.test(g);
+      if (gl !== '' && (!valido(gl) || !valido(gv))) {
+        alert('En el Pleno al 15 pon un número de goles o M (3 o más) para cada equipo.');
+        return;
+      }
+      const norm = (g) => (g === 'M' ? 'M' : String(Number(g)));
+      resultados[pleno.dataset.resPleno] = gl === '' ? '' : `${norm(gl)}-${norm(gv)}`;
     }
 
     try {
@@ -322,7 +337,8 @@
         body: JSON.stringify({ resultados }),
       });
       editandoResultados.delete(jornadaId);
-      await cargarJornada();
+      if (bloque.closest('#tab-historial')) await cargarHistorial(jornadaId);
+      else await cargarJornada();
     } catch (err) {
       alert(err.message);
     }
@@ -469,9 +485,9 @@
         const [gl, gv] = (p.resultado || '').split('-');
         return `
           <td class="col-resultado editando" data-res-pleno="${p.id}">
-            <input type="number" min="0" max="99" data-res-goles="local" value="${escapeHtml(gl || '')}" aria-label="Goles local" />
+            <input type="text" maxlength="2" data-res-goles="local" value="${escapeHtml(gl || '')}" aria-label="Goles local (número o M)" title="Goles o M (3 o más)" />
             -
-            <input type="number" min="0" max="99" data-res-goles="visitante" value="${escapeHtml(gv || '')}" aria-label="Goles visitante" />
+            <input type="text" maxlength="2" data-res-goles="visitante" value="${escapeHtml(gv || '')}" aria-label="Goles visitante (número o M)" title="Goles o M (3 o más)" />
           </td>
         `;
       }
@@ -530,11 +546,15 @@
   }
 
   // ---------- HISTORIAL (una pestaña por jornada cerrada, con la tabla de Resultados de todos) ----------
-  async function cargarHistorial() {
+  const jornadasHistorial = new Map(); // jornada id -> { jornada, partidos, usuarios }
+
+  // seleccionarId: jornada que se deja abierta al recargar (p. ej. tras guardar resultados)
+  async function cargarHistorial(seleccionarId) {
     try {
       const { usuarios, jornadas } = await api('/api/historial');
       const tabsWrap = $('#historial-tabs');
       tabsWrap.innerHTML = '';
+      jornadasHistorial.clear();
 
       if (!jornadas || jornadas.length === 0) {
         $('#historial-contenido').innerHTML =
@@ -542,46 +562,52 @@
         return;
       }
 
-      jornadas.forEach((j, idx) => {
+      jornadas.forEach((j) => {
+        const jornada = { ...j, id: j.jornada_id };
+        jornadasHistorial.set(jornada.id, { jornada, partidos: j.partidos, usuarios });
+      });
+
+      const inicial = jornadasHistorial.has(seleccionarId) ? seleccionarId : jornadas[0].jornada_id;
+      jornadas.forEach((j) => {
         const btn = document.createElement('button');
         btn.textContent = j.manual ? `${j.numero} (a mano)` : `Jornada ${j.numero}`;
-        if (idx === 0) btn.classList.add('active');
+        if (j.jornada_id === inicial) btn.classList.add('active');
         btn.addEventListener('click', () => {
           $$('#historial-tabs button').forEach((b) => b.classList.remove('active'));
           btn.classList.add('active');
-          pintarHistorialJornada(usuarios, j);
+          pintarHistorialJornada(j.jornada_id);
         });
         tabsWrap.appendChild(btn);
       });
 
-      pintarHistorialJornada(usuarios, jornadas[0]);
+      pintarHistorialJornada(inicial);
     } catch (e) {
       console.error('Error cargando el historial:', e);
     }
   }
 
-  function pintarHistorialJornada(usuarios, jornada) {
+  function pintarHistorialJornada(jornadaId) {
     const cont = $('#historial-contenido');
-    if (!jornada) {
+    const datos = jornadasHistorial.get(jornadaId);
+    if (!datos) {
       cont.innerHTML = '<div class="empty-state"><p>Todavía no hay jornadas cerradas en el historial.</p></div>';
       return;
     }
 
-    const { cabecera, cuerpo, pie } = htmlTablaResultados(usuarios, jornada.partidos, {
-      conColumnaResultado: !jornada.manual || jornada.partidos.some((p) => p.resultado),
-    });
-
     cont.innerHTML = `
-      <h3>${tituloJornada(jornada)}</h3>
-      <div class="resultados-todos-tabla-scroll">
-        <table class="resultados-todos-tabla">
-          <thead>${cabecera}</thead>
-          <tbody>${cuerpo}</tbody>
-          <tfoot>${pie}</tfoot>
-        </table>
-      </div>
+      <section class="jornada-bloque" data-jornada-id="${datos.jornada.id}">
+        <h3 class="jornada-bloque-titulo">${tituloJornada(datos.jornada)}</h3>
+        ${htmlResultadosDeTodos(datos.jornada, datos.partidos, datos.usuarios)}
+      </section>
     `;
   }
+
+  $('#tab-historial').addEventListener('click', async (e) => {
+    const boton = e.target.closest('[data-accion]');
+    if (!boton) return;
+    const bloque = boton.closest('.jornada-bloque');
+    await accionResultados(boton.dataset.accion, bloque, Number(bloque.dataset.jornadaId));
+  });
 
   // ---------- UTIL ----------
   function escapeHtml(str) {
