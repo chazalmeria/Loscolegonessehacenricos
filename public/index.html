@@ -49,6 +49,7 @@
         <button class="nav-item active" data-tab="inicio">Inicio</button>
         <button class="nav-item" data-tab="jornada">Jornada</button>
         <button class="nav-item" data-tab="historial">Historial</button>
+        <button class="nav-item" data-tab="economia">Economía</button>
         <button class="nav-item" data-tab="estadisticas">Estadisticas</button>
       </nav>
       <button id="btn-logout" class="btn btn-ghost btn-logout">Cerrar sesión</button>
@@ -103,6 +104,16 @@
         <h2>Historial</h2>
         <div id="historial-tabs" class="user-tabs"></div>
         <div id="historial-contenido"></div>
+      </div>
+
+      <!-- ECONOMIA: saldo de cada uno en el bote comun (se modifica a mano) -->
+      <div id="tab-economia" class="tab-panel">
+        <div class="tab-header-row">
+          <h2>Economía</h2>
+          <div id="economia-acciones" class="resultados-acciones"></div>
+        </div>
+        <p class="resultados-todos-hint">Lo que lleva cada uno en el bote común: en positivo lo que tiene a favor y en negativo lo que debe. Se cambia a mano con "Modificar saldos".</p>
+        <div id="economia-contenido"></div>
       </div>
 
       <!-- ESTADISTICAS -->

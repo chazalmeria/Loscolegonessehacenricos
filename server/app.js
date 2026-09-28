@@ -8,6 +8,7 @@ const authRoutes = require('./routes/auth');
 const chatRoutes = require('./routes/chat');
 const { router: jornadaRoutes } = require('./routes/jornada');
 const historialRoutes = require('./routes/historial');
+const economiaRoutes = require('./routes/economia');
 const adminRoutes = require('./routes/admin');
 
 const app = express();
@@ -31,6 +32,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/jornada', jornadaRoutes);
 app.use('/api/historial', historialRoutes);
+app.use('/api/economia', economiaRoutes);
 app.use('/api/admin', adminRoutes);
 
 app.get('*', (req, res, next) => {

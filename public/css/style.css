@@ -397,6 +397,26 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
   border-bottom: none;
 }
 
+/* ECONOMIA */
+#tab-economia .resultados-todos-hint { margin-top: .4rem; }
+.economia-wrap { max-width: 640px; }
+.economia-tabla td:first-child { font-weight: 600; }
+.economia-tabla td.economia-saldo { font-weight: 700; font-variant-numeric: tabular-nums; }
+.economia-tabla td.saldo-positivo { color: var(--primary-text); }
+.economia-tabla td.saldo-negativo { color: var(--danger); }
+.economia-tabla td.saldo-cero { color: var(--text-dim); }
+.economia-tabla td.economia-modificado { color: var(--text-dim); font-size: .8rem; }
+.economia-tabla td.editando input {
+  width: 6.5rem;
+  text-align: right;
+  font: inherit;
+  padding: .25rem .4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+}
+
 /* HISTORIAL */
 .user-tabs {
   display: flex;

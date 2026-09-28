@@ -92,6 +92,7 @@
     iniciarSondeoChat();
     cargarJornada();
     cargarHistorial();
+    cargarEconomia();
   }
 
   // ---------- MENU LATERAL ----------
@@ -101,6 +102,8 @@
       btn.classList.add('active');
       $$('.tab-panel').forEach((p) => p.classList.remove('active'));
       $(`#tab-${btn.dataset.tab}`).classList.add('active');
+      // Economia se recarga al abrirla (otro puede haber cambiado los saldos), salvo si se esta editando
+      if (btn.dataset.tab === 'economia' && !editandoEconomia) cargarEconomia();
     });
   });
 
@@ -706,6 +709,138 @@
     if (!boton) return;
     const bloque = boton.closest('.jornada-bloque');
     await accionResultados(boton.dataset.accion, bloque, Number(bloque.dataset.jornadaId));
+  });
+
+  // ---------- ECONOMIA (saldo de cada uno en el bote comun, a mano) ----------
+  let datosEconomia = null;
+  let editandoEconomia = false;
+
+  const formatoEuros = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+
+  function euros(centimos) {
+    const texto = formatoEuros.format(centimos / 100);
+    return centimos > 0 ? `+${texto}` : texto;
+  }
+
+  function claseSaldo(centimos) {
+    return centimos > 0 ? 'saldo-positivo' : centimos < 0 ? 'saldo-negativo' : 'saldo-cero';
+  }
+
+  // "12,50" / "-3" / "+5.5" / "1.234,56" -> centimos (entero), o null si no es valido
+  function leerEuros(texto) {
+    let s = String(texto || '').trim().replace(/\s|€/g, '');
+    if (s === '') return 0;
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    if (!/^[+-]?\d+(\.\d{1,2})?$/.test(s)) return null;
+    return Math.round(Number(s) * 100);
+  }
+
+  // "12,50" / "20" para rellenar la casilla al editar (sin simbolo ni signo +)
+  function eurosParaEditar(centimos) {
+    const decimales = centimos % 100 === 0 ? 0 : 2;
+    return (centimos / 100).toLocaleString('es-ES', {
+      minimumFractionDigits: decimales, maximumFractionDigits: decimales, useGrouping: false,
+    });
+  }
+
+  function fechaCorta(sqlUtc) {
+    if (!sqlUtc) return '';
+    return new Date(sqlUtc.replace(' ', 'T') + 'Z').toLocaleString('es-ES', {
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  async function cargarEconomia() {
+    try {
+      datosEconomia = await api('/api/economia');
+      pintarEconomia();
+    } catch (e) {
+      console.error('Error cargando la economía:', e);
+    }
+  }
+
+  function pintarEconomia() {
+    if (!datosEconomia) return;
+    const { usuarios, total_centimos: total } = datosEconomia;
+
+    $('#economia-acciones').innerHTML = editandoEconomia
+      ? `
+        <button type="button" class="btn btn-ghost btn-small" data-accion="cancelar-economia">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-small" data-accion="guardar-economia">Guardar saldos</button>
+      `
+      : '<button type="button" class="btn btn-ghost btn-small" data-accion="editar-economia">Modificar saldos</button>';
+
+    const filas = usuarios.map((u) => {
+      const saldo = editandoEconomia
+        ? `<td class="economia-saldo editando"><input type="text" inputmode="decimal" data-saldo="${escapeHtml(u.username)}" value="${escapeHtml(eurosParaEditar(u.saldo_centimos))}" aria-label="Saldo de ${escapeHtml(u.username)} en euros" /> €</td>`
+        : `<td class="economia-saldo ${claseSaldo(u.saldo_centimos)}">${euros(u.saldo_centimos)}</td>`;
+      const modificado = u.updated_at
+        ? `${escapeHtml(fechaCorta(u.updated_at))}${u.updated_by ? ` · ${escapeHtml(u.updated_by)}` : ''}`
+        : '—';
+      return `
+        <tr>
+          <td>${escapeHtml(u.username)}</td>
+          ${saldo}
+          <td class="economia-modificado">${modificado}</td>
+        </tr>
+      `;
+    }).join('');
+
+    $('#economia-contenido').innerHTML = `
+      <div class="resultados-todos-tabla-scroll economia-wrap">
+        <table class="resultados-todos-tabla economia-tabla">
+          <thead>
+            <tr><th>Usuario</th><th>Saldo en el bote</th><th>Última modificación</th></tr>
+          </thead>
+          <tbody>${filas}</tbody>
+          <tfoot>
+            <tr>
+              <td>Total del bote</td>
+              <td class="economia-saldo ${claseSaldo(total)}">${euros(total)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      ${editandoEconomia ? '<p class="resultados-todos-hint">Pon cada saldo en euros, por ejemplo 12,50 o -3. En negativo si debe dinero al bote.</p>' : ''}
+    `;
+  }
+
+  async function guardarEconomia() {
+    const saldos = {};
+    for (const input of $$('#economia-contenido [data-saldo]')) {
+      const centimos = leerEuros(input.value);
+      if (centimos === null) {
+        alert(`La cantidad de ${input.dataset.saldo} no es válida. Usa por ejemplo 12,50 o -3.`);
+        input.focus();
+        return;
+      }
+      saldos[input.dataset.saldo] = centimos;
+    }
+    try {
+      datosEconomia = await api('/api/economia', { method: 'POST', body: JSON.stringify({ saldos }) });
+      editandoEconomia = false;
+      pintarEconomia();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  $('#tab-economia').addEventListener('click', async (e) => {
+    const boton = e.target.closest('[data-accion]');
+    if (!boton) return;
+    const accion = boton.dataset.accion;
+    if (accion === 'editar-economia') {
+      editandoEconomia = true;
+      await cargarEconomia(); // parte de lo ultimo guardado
+      const primero = $('#economia-contenido [data-saldo]');
+      if (primero) primero.focus();
+    }
+    if (accion === 'cancelar-economia') {
+      editandoEconomia = false;
+      pintarEconomia();
+    }
+    if (accion === 'guardar-economia') await guardarEconomia();
   });
 
   // ---------- UTIL ----------

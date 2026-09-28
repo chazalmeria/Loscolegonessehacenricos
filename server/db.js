@@ -44,6 +44,14 @@ const SCHEMA = [
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(partido_id, username)
   )`,
+  // Saldo (+/-) de cada usuario en el bote comun, en centimos. Se modifica a mano
+  // desde la pestaña Economia.
+  `CREATE TABLE IF NOT EXISTS economia (
+    username TEXT PRIMARY KEY,
+    saldo_centimos INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT,
+    updated_by TEXT
+  )`,
   `CREATE TABLE IF NOT EXISTS meta (
     clave TEXT PRIMARY KEY,
     valor TEXT
