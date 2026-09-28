@@ -1023,12 +1023,14 @@
     }
   }
 
-  // Ordena de mayor a menor y reparte posiciones (empatados comparten puesto)
+  // Ordena de mayor a menor y reparte posiciones seguidas: los empatados
+  // comparten puesto y el siguiente va justo detras (1, 1, 2, 2, 3...), para
+  // que siempre haya oro, plata y bronce aunque haya empates.
   function conPosiciones(filas, valor) {
     const ordenadas = [...filas].sort((a, b) => valor(b) - valor(a) || a.username.localeCompare(b.username));
     return ordenadas.map((f, i) => {
       const anterior = ordenadas[i - 1];
-      f.posicion = anterior && valor(anterior) === valor(f) ? anterior.posicion : i + 1;
+      f.posicion = !anterior ? 1 : valor(anterior) === valor(f) ? anterior.posicion : anterior.posicion + 1;
       return f;
     });
   }
