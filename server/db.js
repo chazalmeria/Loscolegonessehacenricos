@@ -44,6 +44,21 @@ const SCHEMA = [
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(partido_id, username)
   )`,
+  `CREATE TABLE IF NOT EXISTS meta (
+    clave TEXT PRIMARY KEY,
+    valor TEXT
+  )`,
+];
+
+// Columnas añadidas despues de la primera version. SQLite no tiene
+// "ADD COLUMN IF NOT EXISTS", asi que se intentan una a una y se ignora el
+// error de "duplicate column" cuando ya existen.
+const MIGRACIONES = [
+  'ALTER TABLE jornadas ADD COLUMN draw_id TEXT',   // id del sorteo en loteriasapi.com
+  'ALTER TABLE jornadas ADD COLUMN draw_date TEXT', // fecha del sorteo (YYYY-MM-DD)
+  'ALTER TABLE partidos ADD COLUMN resultado TEXT', // signo real (1/X/2) o, en el pleno, goles "2-1"
+  // Evita crear dos veces la misma jornada si dos peticiones sincronizan a la vez
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_jornadas_draw_id ON jornadas(draw_id)',
 ];
 
 let client = null;
@@ -73,6 +88,13 @@ function ready() {
         });
 
         await client.batch(SCHEMA, 'write');
+        for (const sql of MIGRACIONES) {
+          try {
+            await client.execute(sql);
+          } catch (err) {
+            if (!/duplicate column/i.test(err.message)) throw err;
+          }
+        }
         for (const u of USERS) {
           await client.execute({
             sql: 'INSERT OR IGNORE INTO users (username, display_name) VALUES (?, ?)',

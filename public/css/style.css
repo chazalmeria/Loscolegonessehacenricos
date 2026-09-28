@@ -10,6 +10,8 @@
   --primary-text: #16803f;
   --on-primary: #ffffff;
   --danger: #d6474f;
+  --ok-bg: #dcf5e6;
+  --fail-bg: #fbe4e5;
   --radius: 10px;
   --shadow: 0 1px 3px rgba(16, 36, 24, 0.07);
 }
@@ -346,6 +348,19 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
 .resultados-todos-tabla thead th:first-child { background: var(--bg-alt); }
 .resultados-todos-tabla td.valor-relleno { color: var(--primary-text); font-weight: 700; }
 .resultados-todos-tabla td.valor-vacio { color: var(--text-dim); }
+.resultados-todos-tabla .col-resultado {
+  background: var(--bg-alt);
+  font-weight: 700;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.resultados-todos-tabla td.acierto { background: var(--ok-bg); color: var(--primary-text); font-weight: 700; }
+.resultados-todos-tabla td.fallo { background: var(--fail-bg); color: var(--danger); font-weight: 700; }
+.resultados-todos-tabla tfoot td {
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+  border-bottom: none;
+}
 
 /* HISTORIAL */
 .user-tabs {

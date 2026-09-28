@@ -287,26 +287,74 @@
   }
 
   function pintarResultadosDeTodos(usuarios, partidos) {
-    const cabecera = $('#resultados-todos-cabecera');
-    const cuerpo = $('#resultados-todos-cuerpo');
+    const tabla = htmlTablaResultados(usuarios, partidos);
+    $('#resultados-todos-cabecera').innerHTML = tabla.cabecera;
+    $('#resultados-todos-cuerpo').innerHTML = tabla.cuerpo;
+    $('#resultados-todos-pie').innerHTML = tabla.pie;
+  }
 
-    cabecera.innerHTML = `
+  // ---------- COMPROBACION DE RESULTADOS ----------
+  // Pleno al 15: se juega por goles de cada equipo en 0, 1, 2 o M (3 o mas).
+  function categoriaGoles(n) {
+    const g = Number(n);
+    if (!Number.isFinite(g) || g < 0) return null;
+    return g >= 3 ? 'M' : String(g);
+  }
+
+  function categoriaPleno(marcador) {
+    const m = String(marcador || '').match(/^\s*(\d+)\s*-\s*(\d+)\s*$/);
+    return m ? `${categoriaGoles(m[1])}-${categoriaGoles(m[2])}` : null;
+  }
+
+  // true = acierto, false = fallo, null = aun no hay resultado o no hay pronostico
+  function esAcierto(partido, pronostico) {
+    if (!partido.resultado || !pronostico) return null;
+    if (partido.es_pleno) {
+      const real = categoriaPleno(partido.resultado);
+      const puesto = categoriaPleno(pronostico);
+      return real && puesto ? real === puesto : null;
+    }
+    return String(pronostico).toUpperCase() === String(partido.resultado).toUpperCase();
+  }
+
+  // Tabla "Resultados de todos" (partido x usuario) usada en Jornada y en Historial.
+  function htmlTablaResultados(usuarios, partidos) {
+    const aciertos = Object.fromEntries(usuarios.map((u) => [u, 0]));
+    const conResultado = partidos.filter((p) => p.resultado).length;
+
+    const cabecera = `
       <tr>
         <th>Partido</th>
+        <th class="col-resultado">Resultado</th>
         ${usuarios.map((u) => `<th>${escapeHtml(u)}</th>`).join('')}
       </tr>
     `;
 
-    cuerpo.innerHTML = partidos.map((p) => {
+    const cuerpo = partidos.map((p) => {
       const etiqueta = (p.es_pleno ? 'Pleno al 15: ' : '') + `${escapeHtml(p.equipo_local)} - ${escapeHtml(p.equipo_visitante)}`;
+      const resultado = p.resultado
+        ? `<td class="col-resultado">${escapeHtml(p.resultado)}</td>`
+        : `<td class="col-resultado valor-vacio" title="Aún sin resultado">·</td>`;
       const celdas = usuarios.map((u) => {
         const valor = (p.predicciones && p.predicciones[u]) || '';
-        return valor
-          ? `<td class="valor-relleno">${escapeHtml(valor)}</td>`
-          : `<td class="valor-vacio">—</td>`;
+        if (!valor) return `<td class="valor-vacio">—</td>`;
+        const acierto = esAcierto(p, valor);
+        if (acierto) aciertos[u]++;
+        const clase = acierto === true ? 'acierto' : acierto === false ? 'fallo' : 'valor-relleno';
+        return `<td class="${clase}">${escapeHtml(valor)}</td>`;
       }).join('');
-      return `<tr><td>${etiqueta}</td>${celdas}</tr>`;
+      return `<tr><td>${etiqueta}</td>${resultado}${celdas}</tr>`;
     }).join('');
+
+    const pie = conResultado === 0 ? '' : `
+      <tr>
+        <td>Aciertos</td>
+        <td class="col-resultado">${conResultado}/${partidos.length}</td>
+        ${usuarios.map((u) => `<td>${aciertos[u]}/${conResultado}</td>`).join('')}
+      </tr>
+    `;
+
+    return { cabecera, cuerpo, pie };
   }
 
   $('#btn-guardar-predicciones').addEventListener('click', async () => {
@@ -387,22 +435,7 @@
       return;
     }
 
-    const cabecera = `
-      <tr>
-        <th>Partido</th>
-        ${usuarios.map((u) => `<th>${escapeHtml(u)}</th>`).join('')}
-      </tr>
-    `;
-    const cuerpo = jornada.partidos.map((p) => {
-      const etiqueta = (p.es_pleno ? 'Pleno al 15: ' : '') + `${escapeHtml(p.equipo_local)} - ${escapeHtml(p.equipo_visitante)}`;
-      const celdas = usuarios.map((u) => {
-        const valor = (p.predicciones && p.predicciones[u]) || '';
-        return valor
-          ? `<td class="valor-relleno">${escapeHtml(valor)}</td>`
-          : `<td class="valor-vacio">—</td>`;
-      }).join('');
-      return `<tr><td>${etiqueta}</td>${celdas}</tr>`;
-    }).join('');
+    const { cabecera, cuerpo, pie } = htmlTablaResultados(usuarios, jornada.partidos);
 
     cont.innerHTML = `
       <h3>Jornada ${escapeHtml(jornada.numero)}${jornada.temporada ? ` (${escapeHtml(jornada.temporada)})` : ''}</h3>
@@ -410,6 +443,7 @@
         <table class="resultados-todos-tabla">
           <thead>${cabecera}</thead>
           <tbody>${cuerpo}</tbody>
+          <tfoot>${pie}</tfoot>
         </table>
       </div>
     `;

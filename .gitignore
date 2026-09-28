@@ -4,3 +4,6 @@ data/*.db-journal
 .env
 *.log
 .DS_Store
+
+.vercel
+.env*

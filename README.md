@@ -89,23 +89,28 @@ Con cualquiera de las dos opciones, te quedas con dos valores: la URL (`TURSO_DA
    | `SHARED_PASSWORD` | `MaximianoGuapo` (o la que prefieras) |
    | `COOKIE_SECRET` | cualquier cadena larga y aleatoria (invéntatela) |
    | `ADMIN_UPDATE_TOKEN` | otra cadena larga y aleatoria (para la actualización automática de la jornada) |
+   | `LOTERIAS_API_KEY` | tu API key de https://loteriasapi.com (plan gratuito) |
+   | `CRON_SECRET` | otra cadena larga y aleatoria (Vercel la usa para llamar al cron diario) |
 
 4. Pulsa "Deploy". En un minuto tendrás una URL tipo `https://quiniela-colegas.vercel.app` — compártela con Burgos, Paquero, Jordan, Pepe, Largo, Joaquin y Miguel.
 5. Cada vez que hagas `git push` a `main`, Vercel vuelve a desplegar solo.
 
-## Notas sobre la carga automática de la jornada
+## Jornadas y resultados automáticos (loteriasapi.com)
 
-No existe una API pública oficial fiable de La Quiniela para traer los partidos automáticamente sin riesgo de romperse. Por eso:
+La app lee La Quiniela de [loteriasapi.com](https://loteriasapi.com) (datos oficiales de SELAE):
 
-- Cualquier usuario puede escribir los partidos de la semana a mano desde la pestaña "Jornada" → "Editar partidos" (tarda menos de un minuto).
-- Además, hay una tarea programada que hago yo (Claude) todos los días a las 8:00 (hora de Madrid): busco en internet si hay una jornada nueva de La Quiniela. Cuando me pases la URL de tu app ya desplegada en Vercel y el `ADMIN_UPDATE_TOKEN` que hayas puesto, empezaré a publicarla yo directamente contra `POST https://tu-app.vercel.app/api/admin/jornada` (con la cabecera `x-admin-token`), que es justo lo que ese endpoint espera. Hasta entonces, solo te aviso con lo que encuentro.
+- **Jornada nueva**: en cuanto la API publica los 15 partidos de un sorteo nuevo, se crea sola como jornada activa y la anterior pasa al Historial. Si alguien ya la había metido a mano con los mismos partidos, se enlaza con la API en vez de duplicarla (y se conservan los pronósticos).
+- **Resultados**: se guarda el signo real de cada partido (1/X/2) y el marcador del Pleno al 15. En la tabla "Resultados de todos" (Jornada e Historial) cada casilla sale en verde si es acierto y en rojo si es fallo, con el recuento de aciertos de cada uno abajo. El Pleno se compara como en la quiniela oficial: 0, 1, 2 o M (3 o más goles) por equipo.
+- **Cuándo se consulta**: un cron de Vercel llama a `/api/admin/sync` una vez al día (ver `vercel.json`), y además la app sincroniza al abrir Jornada o Historial, como mucho una vez por hora, para no pasar de las 1.000 peticiones/mes del plan gratuito.
+- Para forzar una sincronización a mano: `curl -H "x-admin-token: TU_ADMIN_UPDATE_TOKEN" https://tu-app.vercel.app/api/admin/sync`.
+- Si la API aún no tiene la jornada, se puede seguir metiendo a mano desde "Jornada" → "Editar partidos"; los resultados se rellenarán igual cuando aparezca en la API.
 
 ## Estructura del proyecto
 
 ```
 quiniela-colegas/
 ├── package.json
-├── vercel.json           # redirige /api/* a la funcion serverless
+├── vercel.json           # redirige /api/* a la funcion serverless + cron diario
 ├── .env.example
 ├── api/
 │   └── index.js          # punto de entrada de Vercel (expone server/app.js)
@@ -114,12 +119,14 @@ quiniela-colegas/
 │   ├── index.js           # arranque local ("npm start"); no se usa en Vercel
 │   ├── db.js              # acceso a datos (Turso / SQLite via @libsql/client)
 │   ├── auth.js             # usuarios fijos + contraseña compartida + cookie firmada
+│   ├── loterias.js         # cliente de loteriasapi.com (La Quiniela)
+│   ├── sync.js             # crea jornadas nuevas y rellena resultados desde la API
 │   └── routes/
 │       ├── auth.js         # login / logout / usuario actual
 │       ├── chat.js         # mensajes del chat (sondeo periodico)
 │       ├── jornada.js      # partidos de la semana + pronosticos
 │       ├── historial.js    # pronosticos pasados por usuario
-│       └── admin.js        # actualizacion automatizada de la jornada (token secreto)
+│       └── admin.js        # sincronizacion con la API / carga de jornada (token secreto)
 ├── public/
 │   ├── index.html          # portada + login + app (SPA sencilla), servido por Vercel como estatico
 │   ├── css/style.css

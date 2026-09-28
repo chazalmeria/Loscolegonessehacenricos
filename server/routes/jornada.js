@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const sync = require('../sync');
 const { requireAuth, USERS } = require('../auth');
 
 const router = express.Router();
@@ -62,6 +63,7 @@ async function estadoDeTodos(jornadaId) {
 // Jornada activa + partidos + mis predicciones + estado de todos los usuarios
 router.get('/current', requireAuth, async (req, res, next) => {
   try {
+    await sync.sincronizarSiToca();
     const jornada = await getActiveJornada();
     if (!jornada) return res.json({ jornada: null });
 

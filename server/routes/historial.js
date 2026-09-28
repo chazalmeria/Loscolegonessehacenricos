@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const sync = require('../sync');
 const { requireAuth, USERS } = require('../auth');
 
 const router = express.Router();
@@ -8,6 +9,7 @@ const router = express.Router();
 // "Resultados de todos" de esa jornada (partido x usuario).
 router.get('/', requireAuth, async (req, res, next) => {
   try {
+    await sync.sincronizarSiToca();
     const jornadasPasadas = await db.all('SELECT * FROM jornadas WHERE activa = 0 ORDER BY id DESC');
 
     const jornadas = [];
@@ -38,6 +40,7 @@ router.get('/', requireAuth, async (req, res, next) => {
           equipo_local: p.equipo_local,
           equipo_visitante: p.equipo_visitante,
           es_pleno: !!p.es_pleno,
+          resultado: p.resultado || null,
           predicciones: mapaPorPartido[p.id] || {},
         })),
       });
