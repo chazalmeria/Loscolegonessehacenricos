@@ -569,9 +569,9 @@
   }
 
   function htmlFilaPlenoDefinitivo(pleno, plenoDefinitivo, usuarios, { conColumnaResultado, editable, editandoDefinitivo }) {
-    const colResultado = !conColumnaResultado ? '' : pleno.resultado
-      ? `<td class="col-resultado">${escapeHtml(pleno.resultado)}</td>`
-      : '<td class="col-resultado valor-vacio" title="Aún sin resultado">·</td>';
+    // La columna Resultado se deja vacia: el resultado real del Pleno solo se
+    // muestra en la fila "Pleno al 15" de los usuarios.
+    const colResultado = conColumnaResultado ? '<td class="col-resultado"></td>' : '';
 
     let celda;
     if (editable) {
