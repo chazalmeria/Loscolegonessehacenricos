@@ -243,12 +243,13 @@
     const editable = editandoResultados.has(jornada.id);
     const tabla = htmlTablaResultados(usuarios, partidos, {
       editable,
+      plenoDefinitivo: jornada.pleno_definitivo || null,
       conColumnaResultado: editable || !jornada.manual || partidos.some((p) => p.resultado),
     });
 
     let hint = 'Lo que ha puesto cada uno. En verde los aciertos y en rojo los fallos, según se van conociendo los resultados.';
     if (editable) {
-      hint = 'Pon el signo de cada partido ya jugado (y los goles del Pleno al 15: un número o M si son 3 o más). Deja en blanco lo que no sepas. La API no cambia lo que pongáis a mano; si lo borras, lo volverá a rellenar ella.';
+      hint = 'Pon el signo de cada partido ya jugado (y los goles del Pleno al 15: un número o M si son 3 o más). Deja en blanco lo que no sepas. La API no cambia lo que pongáis a mano; si lo borras, lo volverá a rellenar ella. En "Pleno al 15 definitivo" va el Pleno común que jugáis entre todos.';
     } else if (partidos.some((p) => p.resultado_manual)) {
       hint += ' Los marcados con * los ha puesto alguien a mano.';
     }
@@ -307,6 +308,26 @@
     await accionResultados(accion, bloque, jornadaId);
   });
 
+  // Lee las dos casillas de goles (un numero o "M" = 3 o mas) de un Pleno.
+  // Devuelve "2-M", "" si estan vacias, o null (tras avisar) si no son validas.
+  function leerGolesPleno(contenedor, nombre) {
+    const leer = (lado) => contenedor.querySelector(`[data-res-goles="${lado}"]`).value.trim().toUpperCase();
+    const gl = leer('local');
+    const gv = leer('visitante');
+    if ((gl === '') !== (gv === '')) {
+      alert(`En el ${nombre} pon los goles de los dos equipos (o deja los dos en blanco).`);
+      return null;
+    }
+    if (gl === '') return '';
+    const valido = (g) => g === 'M' || /^\d{1,2}$/.test(g);
+    if (!valido(gl) || !valido(gv)) {
+      alert(`En el ${nombre} pon un número de goles o M (3 o más) para cada equipo.`);
+      return null;
+    }
+    const norm = (g) => (g === 'M' ? 'M' : String(Number(g)));
+    return `${norm(gl)}-${norm(gv)}`;
+  }
+
   async function guardarResultados(bloque, jornadaId) {
     const resultados = {};
     bloque.querySelectorAll('[data-res-partido]').forEach((sel) => {
@@ -314,27 +335,22 @@
     });
     const pleno = bloque.querySelector('[data-res-pleno]');
     if (pleno) {
-      // Goles de cada equipo: un numero o "M" (3 o mas)
-      const leer = (lado) => pleno.querySelector(`[data-res-goles="${lado}"]`).value.trim().toUpperCase();
-      const gl = leer('local');
-      const gv = leer('visitante');
-      if ((gl === '') !== (gv === '')) {
-        alert('En el Pleno al 15 pon los goles de los dos equipos (o deja los dos en blanco).');
-        return;
-      }
-      const valido = (g) => g === 'M' || /^\d{1,2}$/.test(g);
-      if (gl !== '' && (!valido(gl) || !valido(gv))) {
-        alert('En el Pleno al 15 pon un número de goles o M (3 o más) para cada equipo.');
-        return;
-      }
-      const norm = (g) => (g === 'M' ? 'M' : String(Number(g)));
-      resultados[pleno.dataset.resPleno] = gl === '' ? '' : `${norm(gl)}-${norm(gv)}`;
+      const valor = leerGolesPleno(pleno, 'Pleno al 15');
+      if (valor === null) return;
+      resultados[pleno.dataset.resPleno] = valor;
+    }
+    const body = { resultados };
+    const definitivo = bloque.querySelector('[data-res-definitivo]');
+    if (definitivo) {
+      const valor = leerGolesPleno(definitivo, 'Pleno al 15 definitivo');
+      if (valor === null) return;
+      body.pleno_definitivo = valor;
     }
 
     try {
       await api(`/api/jornada/${jornadaId}/resultados`, {
         method: 'POST',
-        body: JSON.stringify({ resultados }),
+        body: JSON.stringify(body),
       });
       editandoResultados.delete(jornadaId);
       if (bloque.closest('#tab-historial')) await cargarHistorial(jornadaId);
@@ -508,7 +524,36 @@
   // Tabla "Resultados de todos" (partido x usuario) usada en Jornada y en Historial.
   // Si la jornada no tiene ningun resultado (tipico de las creadas a mano) y no
   // se esta editando, se puede ocultar la columna Resultado.
-  function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true, editable = false } = {}) {
+  // Fila "Pleno al 15 definitivo": el Pleno comun que juega el grupo. Una sola
+  // casilla para todos, que solo se pone a mano (modo "Poner resultados") y se
+  // compara con el resultado real del Pleno. No suma en los aciertos de nadie.
+  function htmlFilaPlenoDefinitivo(pleno, plenoDefinitivo, usuarios, { conColumnaResultado, editable }) {
+    const colResultado = !conColumnaResultado ? '' : pleno.resultado
+      ? `<td class="col-resultado">${escapeHtml(pleno.resultado)}</td>`
+      : '<td class="col-resultado valor-vacio" title="Aún sin resultado">·</td>';
+
+    let celda;
+    if (editable) {
+      const [dl, dv] = (plenoDefinitivo || '').split('-');
+      celda = `
+        <td colspan="${usuarios.length}" class="pleno-definitivo editando" data-res-definitivo>
+          <input type="text" maxlength="2" data-res-goles="local" value="${escapeHtml(dl || '')}" aria-label="Pleno definitivo: goles local (número o M)" title="Goles o M (3 o más)" />
+          -
+          <input type="text" maxlength="2" data-res-goles="visitante" value="${escapeHtml(dv || '')}" aria-label="Pleno definitivo: goles visitante (número o M)" title="Goles o M (3 o más)" />
+        </td>
+      `;
+    } else if (!plenoDefinitivo) {
+      celda = `<td colspan="${usuarios.length}" class="pleno-definitivo valor-vacio">—</td>`;
+    } else {
+      const acierto = esAcierto(pleno, plenoDefinitivo);
+      const clase = acierto === true ? 'acierto' : acierto === false ? 'fallo' : 'valor-relleno';
+      celda = `<td colspan="${usuarios.length}" class="pleno-definitivo ${clase}">${escapeHtml(plenoDefinitivo)}</td>`;
+    }
+
+    return `<tr class="fila-pleno-definitivo"><td>Pleno al 15 definitivo</td>${colResultado}${celda}</tr>`;
+  }
+
+  function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true, editable = false, plenoDefinitivo = null } = {}) {
     const aciertos = Object.fromEntries(usuarios.map((u) => [u, 0]));
     const conResultado = partidos.filter((p) => p.resultado).length;
 
@@ -531,7 +576,10 @@
         const clase = acierto === true ? 'acierto' : acierto === false ? 'fallo' : 'valor-relleno';
         return `<td class="${clase}">${escapeHtml(valor)}</td>`;
       }).join('');
-      return `<tr><td>${etiqueta}</td>${resultado}${celdas}</tr>`;
+      const fila = `<tr><td>${etiqueta}</td>${resultado}${celdas}</tr>`;
+      return p.es_pleno
+        ? fila + htmlFilaPlenoDefinitivo(p, plenoDefinitivo, usuarios, { conColumnaResultado, editable })
+        : fila;
     }).join('');
 
     const pie = conResultado === 0 ? '' : `

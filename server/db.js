@@ -64,6 +64,9 @@ const MIGRACIONES = [
   // 1 = el resultado lo puso alguien a mano (boton "Poner resultados"); la
   // sincronizacion con la API ya no lo toca.
   'ALTER TABLE partidos ADD COLUMN resultado_manual INTEGER NOT NULL DEFAULT 0',
+  // Pleno al 15 comun que juega el grupo ("2-1", "M-0"...). Solo se pone a mano
+  // desde "Resultados de todos".
+  'ALTER TABLE jornadas ADD COLUMN pleno_definitivo TEXT',
   // Evita crear dos veces la misma jornada si dos peticiones sincronizan a la vez
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_jornadas_draw_id ON jornadas(draw_id)',
 ];

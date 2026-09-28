@@ -384,6 +384,8 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
 .resultados-todos-tabla td.editando select { width: 3.4rem; }
 .resultados-todos-tabla td.editando input { width: 2.6rem; text-align: center; }
 .resultados-acciones { display: flex; gap: .5rem; flex-wrap: wrap; }
+.resultados-todos-tabla .fila-pleno-definitivo td:first-child { font-weight: 700; }
+.resultados-todos-tabla td.pleno-definitivo { font-weight: 700; letter-spacing: .05em; }
 .resultados-todos-wrap .tab-header-row h4 { margin: .8rem 0 .3rem; }
 .resultados-todos-tabla td.acierto { background: var(--ok-bg); color: var(--primary-text); font-weight: 700; }
 .resultados-todos-tabla td.fallo { background: var(--fail-bg); color: var(--danger); font-weight: 700; }

@@ -41,6 +41,7 @@ router.get('/', requireAuth, async (req, res, next) => {
         numero: jornada.numero,
         temporada: jornada.temporada,
         manual: !!jornada.manual,
+        pleno_definitivo: jornada.pleno_definitivo || null,
         partidos: partidos.map((p) => ({
           id: p.id,
           equipo_local: p.equipo_local,

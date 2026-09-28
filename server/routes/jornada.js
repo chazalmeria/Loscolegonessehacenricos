@@ -132,10 +132,11 @@ router.post('/:id/archivar', requireAuth, async (req, res, next) => {
 // Poner (o corregir) a mano el resultado real de los partidos de una jornada
 // (abierta o ya en el Historial), por si la API va con retraso. Body: { resultados: { partidoId: valor } }
 // con valor "1"/"X"/"2" (o "2-1" en el Pleno al 15). Un valor vacio borra el
-// resultado y deja que lo vuelva a rellenar la API.
+// resultado y deja que lo vuelva a rellenar la API. Opcional: pleno_definitivo
+// ("2-1", "M-0"... o "" para borrarlo), el Pleno al 15 comun del grupo.
 router.post('/:id/resultados', requireAuth, async (req, res, next) => {
   try {
-    const { resultados } = req.body || {};
+    const { resultados, pleno_definitivo: plenoDefinitivo } = req.body || {};
     if (!resultados || typeof resultados !== 'object') {
       return res.status(400).json({ error: 'Formato invalido' });
     }
@@ -158,9 +159,20 @@ router.post('/:id/resultados', requireAuth, async (req, res, next) => {
       cambios.push([valor || null, valor ? 1 : 0, p.id]);
     }
 
+    let definitivo;
+    if (plenoDefinitivo !== undefined) {
+      definitivo = String(plenoDefinitivo || '').trim().toUpperCase();
+      if (definitivo !== '' && !/^(\d{1,2}|M)-(\d{1,2}|M)$/.test(definitivo)) {
+        return res.status(400).json({ error: 'Pleno al 15 definitivo no válido' });
+      }
+    }
+
     await db.tx(async (t) => {
       for (const args of cambios) {
         await t.run('UPDATE partidos SET resultado = ?, resultado_manual = ? WHERE id = ?', args);
+      }
+      if (definitivo !== undefined) {
+        await t.run('UPDATE jornadas SET pleno_definitivo = ? WHERE id = ?', [definitivo || null, jornada.id]);
       }
     });
 
