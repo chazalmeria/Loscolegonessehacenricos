@@ -10,7 +10,11 @@ const router = express.Router();
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     await sync.sincronizarSiToca();
-    const jornadasPasadas = await db.all('SELECT * FROM jornadas WHERE activa = 0 ORDER BY id DESC');
+    // Por fecha de creacion (la mas reciente primero), no por id: las jornadas
+    // importadas del Excel se insertaron despues pero son anteriores.
+    const jornadasPasadas = await db.all(
+      'SELECT * FROM jornadas WHERE activa = 0 ORDER BY created_at DESC, id DESC'
+    );
 
     const jornadas = [];
     for (const jornada of jornadasPasadas) {

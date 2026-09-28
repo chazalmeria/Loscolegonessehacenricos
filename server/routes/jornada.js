@@ -149,7 +149,7 @@ router.post('/:id/resultados', requireAuth, async (req, res, next) => {
       const p = partidos.get(Number(partidoId));
       if (!p) continue;
       const valor = String(bruto || '').trim().toUpperCase();
-      const valido = valor === '' || (p.es_pleno ? /^\d{1,2}-\d{1,2}$/.test(valor) : ['1', 'X', '2'].includes(valor));
+      const valido = valor === '' || (p.es_pleno ? /^(\d{1,2}|M)-(\d{1,2}|M)$/.test(valor) : ['1', 'X', '2'].includes(valor));
       if (!valido) {
         return res.status(400).json({ error: `Resultado no válido en ${p.equipo_local} - ${p.equipo_visitante}` });
       }

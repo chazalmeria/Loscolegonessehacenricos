@@ -443,9 +443,11 @@
     return g >= 3 ? 'M' : String(g);
   }
 
+  // Acepta goles ("3-1") o la categoria ya puesta ("2-M", como en el Excel)
   function categoriaPleno(marcador) {
-    const m = String(marcador || '').match(/^\s*(\d+)\s*-\s*(\d+)\s*$/);
-    return m ? `${categoriaGoles(m[1])}-${categoriaGoles(m[2])}` : null;
+    const m = String(marcador || '').toUpperCase().match(/^\s*(\d+|M)\s*-\s*(\d+|M)\s*$/);
+    const cat = (g) => (g === 'M' ? 'M' : categoriaGoles(g));
+    return m ? `${cat(m[1])}-${cat(m[2])}` : null;
   }
 
   // true = acierto, false = fallo, null = aun no hay resultado o no hay pronostico
