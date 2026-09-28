@@ -104,7 +104,7 @@ La app lee La Quiniela de [loteriasapi.com](https://loteriasapi.com) (datos ofic
 - **Cuándo se consulta**: un cron de Vercel llama a `/api/admin/sync` una vez al día (ver `vercel.json`), y además la app sincroniza al abrir Jornada o Historial, como mucho una vez por hora, para no pasar de las 1.000 peticiones/mes del plan gratuito.
 - Para forzar una sincronización a mano: `curl -H "x-admin-token: TU_ADMIN_UPDATE_TOKEN" https://tu-app.vercel.app/api/admin/sync`.
 - **Resultados a mano**: si la API va con retraso, en cada jornada (abierta o ya en el Historial) el botón "Poner resultados" (en "Resultados de todos") permite poner el signo de cada partido y los goles del Pleno (un número o M) mirando la web oficial. Salen con un * y la API ya no los cambia; si se borran, la API los vuelve a rellenar cuando los tenga.
-- **Pleno al 15 definitivo**: debajo del Pleno al 15 de cada uno hay una fila con el Pleno común que juega el grupo. Es una sola casilla, se pone a mano con "Poner resultados", se colorea según el resultado real del Pleno y no suma en los aciertos individuales.
+- **Pleno al 15 definitivo**: debajo del Pleno al 15 de cada uno hay una fila con el Pleno común que juega el grupo. Es una sola casilla, se pone o cambia a mano con su botón "Poner"/"Cambiar" (o dentro de "Poner resultados"), se colorea según el resultado real del Pleno y no suma en los aciertos individuales.
 - Si la API no funciona o aún no tiene la jornada: "Jornada" → "Crear jornada manualmente". Esas jornadas no reciben resultados de la API y pasan al Historial solo cuando alguien pulsa "Añadir al histórico".
 
 ## Estructura del proyecto
