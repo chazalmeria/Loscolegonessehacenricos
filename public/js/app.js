@@ -1014,6 +1014,7 @@
   let datosRankings = null;
 
   async function cargarRankings() {
+    if (!datosRankings) $('#rankings-contenido').innerHTML = '<p class="resultados-todos-hint">Cargando…</p>';
     try {
       datosRankings = await api('/api/historial');
       pintarRanking();
