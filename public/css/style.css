@@ -397,6 +397,28 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
   border-bottom: none;
 }
 
+/* PREMIOS */
+.resultados-todos-tabla tr.fila-premio td { border-top: 1px dashed var(--border); }
+.resultados-todos-tabla td.premio-celda { line-height: 1.2; }
+.resultados-todos-tabla td.con-premio { background: var(--ok-bg); color: var(--primary-text); }
+.premio-categoria { display: block; font-weight: 700; }
+.premio-importe { display: block; font-size: .75rem; font-weight: 600; }
+.resultados-todos-tabla td.premio-total { font-weight: 700; color: var(--primary-text); }
+.premios-wrap { margin-top: 1.5rem; }
+.premios-tabla-wrap { max-width: 520px; }
+.premios-tabla td:first-child { font-weight: 600; }
+.premios-tabla td.premio-importe-tabla { font-weight: 700; font-variant-numeric: tabular-nums; }
+.premios-tabla td.editando input {
+  width: 7rem;
+  text-align: right;
+  font: inherit;
+  padding: .2rem .4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+}
+
 /* ECONOMIA */
 #tab-economia .resultados-todos-hint { margin-top: .4rem; }
 .economia-wrap { max-width: 640px; }

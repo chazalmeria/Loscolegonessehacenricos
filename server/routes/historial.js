@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const sync = require('../sync');
+const premios = require('../premios');
 const { requireAuth, USERS } = require('../auth');
 
 const router = express.Router();
@@ -42,6 +43,7 @@ router.get('/', requireAuth, async (req, res, next) => {
         temporada: jornada.temporada,
         manual: !!jornada.manual,
         pleno_definitivo: jornada.pleno_definitivo || null,
+        premios: await premios.getPremios(jornada.id),
         partidos: partidos.map((p) => ({
           id: p.id,
           equipo_local: p.equipo_local,

@@ -4,6 +4,8 @@
 // Plan gratuito: 1.000 peticiones al mes y 10 por minuto, asi que el resto de
 // la app lo llama con moderacion (ver server/sync.js).
 
+const { normalizarPremiosApi } = require('./premios');
+
 const BASE_URL = 'https://api.loteriasapi.com/api/v1';
 
 async function pedir(path) {
@@ -44,7 +46,10 @@ function normalizarResultado(r) {
     }))
     .sort((a, b) => a.posicion - b.posicion);
 
-  return { drawId: String(r.drawId), drawDate: r.drawDate, partidos };
+  // Premios por categoria (vacio hasta que SELAE publica el escrutinio)
+  const premios = normalizarPremiosApi(r.prizes);
+
+  return { drawId: String(r.drawId), drawDate: r.drawDate, partidos, premios };
 }
 
 // Ultimos sorteos de La Quiniela con sus 15 partidos (los que aun no se han

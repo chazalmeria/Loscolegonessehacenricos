@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const sync = require('../sync');
+const premios = require('../premios');
 const { requireAuth, USERS } = require('../auth');
 
 const router = express.Router();
@@ -62,6 +63,7 @@ router.get('/current', requireAuth, async (req, res, next) => {
           return { ...p, mi_pronostico: predicciones[req.username] || '', predicciones };
         }),
         estado: estadoDeTodos(partidos, prediccionesDeTodos),
+        premios: await premios.getPremios(jornada.id),
       });
     }
 
@@ -177,6 +179,51 @@ router.post('/:id/resultados', requireAuth, async (req, res, next) => {
     });
 
     res.json({ ok: true, cambiados: cambios.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Poner (o corregir) a mano los premios de una jornada (abierta o en el
+// Historial). Body: { premios: { "15": { premio_centimos, acertantes }, "14": ... } }.
+// Si premio_centimos y acertantes vienen vacios (null), se borra esa categoria
+// y la API la puede volver a rellenar.
+router.post('/:id/premios', requireAuth, async (req, res, next) => {
+  try {
+    const { premios: entrada } = req.body || {};
+    if (!entrada || typeof entrada !== 'object') return res.status(400).json({ error: 'Formato invalido' });
+
+    const jornada = await db.get('SELECT id FROM jornadas WHERE id = ?', [Number(req.params.id)]);
+    if (!jornada) return res.status(404).json({ error: 'Esa jornada no existe' });
+
+    const actuales = Object.fromEntries((await premios.getPremios(jornada.id)).map((p) => [p.aciertos, p]));
+    const entero = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+    const ops = [];
+    for (const [clave, valor] of Object.entries(entrada)) {
+      const aciertos = Number(clave);
+      if (!premios.CATEGORIAS.includes(aciertos)) return res.status(400).json({ error: `Categoría no válida: ${clave}` });
+      const premio = entero(valor && valor.premio_centimos);
+      const acertantes = entero(valor && valor.acertantes);
+      if ((premio !== null && (!Number.isSafeInteger(premio) || premio < 0))
+        || (acertantes !== null && (!Number.isSafeInteger(acertantes) || acertantes < 0))) {
+        return res.status(400).json({ error: `Premio no válido en la categoría de ${aciertos === 15 ? 'Pleno al 15' : `${aciertos} aciertos`}` });
+      }
+      const actual = actuales[aciertos];
+      // Solo lo que cambia: reenviar lo que ya vino de la API no lo convierte en "a mano"
+      if (actual && actual.premio_centimos === premio && actual.acertantes === acertantes) continue;
+      if (!actual && premio === null && acertantes === null) continue;
+      ops.push(premio === null && acertantes === null
+        ? ['DELETE FROM premios WHERE jornada_id = ? AND aciertos = ?', [jornada.id, aciertos]]
+        : [`INSERT INTO premios (jornada_id, aciertos, acertantes, premio_centimos, manual) VALUES (?, ?, ?, ?, 1)
+           ON CONFLICT(jornada_id, aciertos) DO UPDATE SET
+             acertantes = excluded.acertantes, premio_centimos = excluded.premio_centimos, manual = 1`,
+          [jornada.id, aciertos, acertantes, premio]]);
+    }
+
+    await db.tx(async (t) => {
+      for (const [sql, args] of ops) await t.run(sql, args);
+    });
+    res.json({ ok: true, cambiados: ops.length, premios: await premios.getPremios(jornada.id) });
   } catch (err) {
     next(err);
   }

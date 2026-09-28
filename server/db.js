@@ -52,6 +52,17 @@ const SCHEMA = [
     updated_at TEXT,
     updated_by TEXT
   )`,
+  // Premios de cada jornada por categoria: aciertos = 15 (Pleno al 15: 14 + Pleno),
+  // 14, 13, 12, 11 o 10. Vienen de loteriasapi.com o se ponen a mano (manual = 1,
+  // y entonces la API no los pisa).
+  `CREATE TABLE IF NOT EXISTS premios (
+    jornada_id INTEGER NOT NULL REFERENCES jornadas(id) ON DELETE CASCADE,
+    aciertos INTEGER NOT NULL,
+    acertantes INTEGER,
+    premio_centimos INTEGER,
+    manual INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (jornada_id, aciertos)
+  )`,
   `CREATE TABLE IF NOT EXISTS meta (
     clave TEXT PRIMARY KEY,
     valor TEXT

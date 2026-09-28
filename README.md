@@ -106,6 +106,7 @@ La app lee La Quiniela de [loteriasapi.com](https://loteriasapi.com) (datos ofic
 - Para forzar una sincronización a mano: `curl -H "x-admin-token: TU_ADMIN_UPDATE_TOKEN" https://tu-app.vercel.app/api/admin/sync`.
 - **Resultados a mano**: si la API va con retraso, en cada jornada (abierta o ya en el Historial) el botón "Poner resultados" (en "Resultados de todos") permite poner el signo de cada partido y los goles del Pleno (un número o M) mirando la web oficial. Salen con un * y la API ya no los cambia; si se borran, la API los vuelve a rellenar cuando los tenga.
 - **Pleno al 15 definitivo**: debajo del Pleno al 15 de cada uno hay una fila con el Pleno común que juega el grupo. Es una sola casilla, se pone o cambia a mano con su botón "Poner"/"Cambiar" (o dentro de "Poner resultados"), se colorea según el resultado real del Pleno y no suma en los aciertos individuales.
+- **Premios**: cuando SELAE publica el escrutinio, la sincronización guarda los premios de cada categoría (Pleno al 15, 14, 13, 12, 11 y 10 aciertos) en "Premios de la jornada". Ojo: el plan gratuito de loteriasapi.com solo da los últimos 7 días, así que las jornadas antiguas (p. ej. las importadas del Excel) hay que rellenarlas a mano con "Poner premios"; la API no pisa lo puesto a mano. En "Resultados de todos", la fila "Premio" muestra la categoría y el premio de cada columna y el total del bote. Como en un boleto real, el Pleno al 15 es común: la categoría Pleno al 15 (14 + Pleno) se decide con el Pleno definitivo.
 - Si la API no funciona o aún no tiene la jornada: "Jornada" → "Crear jornada manualmente". Esas jornadas no reciben resultados de la API y pasan al Historial solo cuando alguien pulsa "Añadir al histórico".
 
 ## Estructura del proyecto
@@ -123,7 +124,8 @@ quiniela-colegas/
 │   ├── db.js              # acceso a datos (Turso / SQLite via @libsql/client)
 │   ├── auth.js             # usuarios fijos + contraseña compartida + cookie firmada
 │   ├── loterias.js         # cliente de loteriasapi.com (La Quiniela)
-│   ├── sync.js             # crea jornadas nuevas y rellena resultados desde la API
+│   ├── sync.js             # crea jornadas nuevas y rellena resultados y premios desde la API
+│   ├── premios.js          # premios por categoria (API o a mano)
 │   └── routes/
 │       ├── auth.js         # login / logout / usuario actual
 │       ├── chat.js         # mensajes del chat (sondeo periodico)

@@ -11,6 +11,7 @@
 
 const db = require('./db');
 const loterias = require('./loterias');
+const premios = require('./premios');
 
 const INTERVALO_MIN = 60;
 
@@ -66,7 +67,7 @@ async function crearJornada(resultado) {
 }
 
 async function sincronizar() {
-  const resumen = { jornadaNueva: null, resultadosActualizados: 0 };
+  const resumen = { jornadaNueva: null, resultadosActualizados: 0, premiosActualizados: 0 };
   const resultados = await loterias.ultimosResultados(3);
   if (resultados.length === 0) return resumen;
 
@@ -83,10 +84,14 @@ async function sincronizar() {
     }
   }
 
-  // 2. Resultados de todas las jornadas enlazadas que siguen en la API
+  // 2. Resultados y premios de todas las jornadas enlazadas que siguen en la API.
+  // Ojo: el plan gratuito solo da los ultimos 7 dias, asi que los premios hay
+  // que guardarlos en cuanto aparecen.
   for (const r of resultados) {
     const jornada = await db.get('SELECT id FROM jornadas WHERE draw_id = ?', [r.drawId]);
-    if (jornada) resumen.resultadosActualizados += await aplicarResultados(jornada.id, r);
+    if (!jornada) continue;
+    resumen.resultadosActualizados += await aplicarResultados(jornada.id, r);
+    if (r.premios.length) resumen.premiosActualizados += await premios.guardarPremiosApi(jornada.id, r.premios);
   }
 
   await marcarSync();

@@ -158,6 +158,7 @@
   const bloquesJornada = new Map(); // jornada id -> { jornada, partidos, estado } (lo ultimo pintado)
   const editandoResultados = new Set(); // jornadas con "Poner resultados" abierto
   const editandoDefinitivo = new Set(); // jornadas editando solo la casilla "Pleno al 15 definitivo"
+  const editandoPremios = new Set(); // jornadas con "Poner premios" abierto
 
   async function cargarJornada() {
     try {
@@ -184,7 +185,8 @@
       : `Jornada ${escapeHtml(j.numero)}${j.temporada ? ` (${escapeHtml(j.temporada)})` : ''}`;
   }
 
-  function htmlBloqueJornada({ jornada, partidos, estado }) {
+  function htmlBloqueJornada({ jornada: datosJornada, partidos, estado, premios }) {
+    const jornada = { ...datosJornada, premios: premios || [] };
     const filas = partidos.filter((p) => !p.es_pleno).map((p) => `
       <tr>
         <td>${p.orden}</td>
@@ -250,6 +252,7 @@
       plenoDefinitivo: jornada.pleno_definitivo || null,
       editandoDefinitivo: editandoDefinitivo.has(jornada.id),
       conColumnaResultado: editable || !jornada.manual || partidos.some((p) => p.resultado),
+      premios: jornada.premios || [],
     });
 
     let hint = 'Lo que ha puesto cada uno. En verde los aciertos y en rojo los fallos, según se van conociendo los resultados.';
@@ -280,6 +283,7 @@
             <tfoot>${tabla.pie}</tfoot>
           </table>
         </div>
+        ${htmlPremiosJornada(jornada)}
       </div>
     `;
   }
@@ -312,6 +316,14 @@
       }
     }
     if (accion === 'guardar-definitivo') await guardarPlenoDefinitivo(bloque, jornadaId);
+
+    // Premios de la jornada
+    if (accion === 'editar-premios' || accion === 'cancelar-premios') {
+      if (accion === 'editar-premios') editandoPremios.add(jornadaId);
+      else editandoPremios.delete(jornadaId);
+      repintarResultados(bloque, jornadaId);
+    }
+    if (accion === 'guardar-premios') await guardarPremios(bloque, jornadaId);
   }
 
   async function guardarPlenoDefinitivo(bloque, jornadaId) {
@@ -607,7 +619,145 @@
     return `<tr class="fila-pleno-definitivo"><td>Pleno al 15 definitivo</td>${colResultado}${celda}</tr>`;
   }
 
-  function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true, editable = false, plenoDefinitivo = null, editandoDefinitivo = false } = {}) {
+  // ---------- PREMIOS ----------
+  // Categorias de La Quiniela: 15 = Pleno al 15 (14 aciertos + Pleno), 14..10 aciertos
+  const CATEGORIAS_PREMIO = [15, 14, 13, 12, 11, 10];
+
+  function nombreCategoria(aciertos) {
+    return aciertos === 15 ? 'Pleno al 15' : `${aciertos} aciertos`;
+  }
+
+  // Categoria que consigue la columna de un usuario. Como en un boleto real, el
+  // Pleno al 15 es comun a todas las columnas: se usa el Pleno definitivo.
+  function categoriaDeUsuario(partidos, usuario, plenoDefinitivo) {
+    const normales = partidos.filter((p) => !p.es_pleno);
+    const pendientes = normales.filter((p) => !p.resultado).length;
+    const aciertos = normales.filter((p) => esAcierto(p, p.predicciones && p.predicciones[usuario])).length;
+    const pleno = partidos.find((p) => p.es_pleno);
+    let categoria = aciertos >= 10 ? aciertos : null;
+    if (aciertos === 14 && pleno && plenoDefinitivo && esAcierto(pleno, plenoDefinitivo)) categoria = 15;
+    return { aciertos, categoria, pendientes };
+  }
+
+  // Fila "Premio" del pie: categoria e importe de cada columna, y el total del bote
+  function htmlFilaPremio(usuarios, partidos, premios, plenoDefinitivo, conColumnaResultado) {
+    if (!partidos.some((p) => !p.es_pleno && p.resultado)) return '';
+    const porCategoria = Object.fromEntries((premios || []).map((p) => [p.aciertos, p]));
+    let total = 0;
+    let totalConocido = true;
+    let provisional = false;
+
+    const celdas = usuarios.map((u) => {
+      const { categoria, pendientes } = categoriaDeUsuario(partidos, u, plenoDefinitivo);
+      if (pendientes) provisional = true;
+      if (!categoria) return `<td class="premio-celda valor-vacio">${pendientes ? '…' : '—'}</td>`;
+      const premio = porCategoria[categoria];
+      const importe = premio && premio.premio_centimos !== null ? premio.premio_centimos : null;
+      if (importe === null) totalConocido = false;
+      else total += importe;
+      return `
+        <td class="premio-celda con-premio" title="${escapeHtml(nombreCategoria(categoria))}">
+          <span class="premio-categoria">${categoria === 15 ? 'P15' : categoria}</span>
+          ${importe !== null ? `<span class="premio-importe">${euros(importe).replace('+', '')}</span>` : ''}
+        </td>
+      `;
+    }).join('');
+
+    const totalTexto = total > 0 || totalConocido ? euros(total).replace('+', '') : '¿?';
+    const resumen = conColumnaResultado
+      ? `<td class="col-resultado premio-total" title="Total que gana el bote">${totalTexto}${provisional ? ' ~' : ''}</td>`
+      : '';
+    return `<tr class="fila-premio"><td>Premio${provisional ? ' <span class="etiqueta-manual">(provisional)</span>' : ''}</td>${resumen}${celdas}</tr>`;
+  }
+
+  // Seccion "Premios de la jornada": tabla por categoria (de la API o a mano)
+  function htmlPremiosJornada(jornada) {
+    const editando = editandoPremios.has(jornada.id);
+    const porCategoria = Object.fromEntries((jornada.premios || []).map((p) => [p.aciertos, p]));
+    const hayPremios = (jornada.premios || []).length > 0;
+    const hayManual = (jornada.premios || []).some((p) => p.manual);
+
+    const filas = CATEGORIAS_PREMIO.map((c) => {
+      const p = porCategoria[c];
+      if (editando) {
+        return `
+          <tr>
+            <td>${nombreCategoria(c)}</td>
+            <td class="editando"><input type="text" inputmode="numeric" data-premio-acertantes="${c}" value="${p && p.acertantes !== null ? p.acertantes : ''}" aria-label="Acertantes de ${nombreCategoria(c)}" /></td>
+            <td class="editando"><input type="text" inputmode="decimal" data-premio-importe="${c}" value="${p && p.premio_centimos !== null ? escapeHtml(eurosParaEditar(p.premio_centimos)) : ''}" aria-label="Premio de ${nombreCategoria(c)} en euros" /> €</td>
+          </tr>
+        `;
+      }
+      const acertantes = p && p.acertantes !== null ? p.acertantes.toLocaleString('es-ES') : '—';
+      const importe = p && p.premio_centimos !== null ? euros(p.premio_centimos).replace('+', '') : '—';
+      return `<tr><td>${nombreCategoria(c)}</td><td>${acertantes}</td><td class="premio-importe-tabla">${importe}${p && p.manual ? '*' : ''}</td></tr>`;
+    }).join('');
+
+    const acciones = editando
+      ? `
+        <button type="button" class="btn btn-ghost btn-small" data-accion="cancelar-premios">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-small" data-accion="guardar-premios">Guardar premios</button>
+      `
+      : '<button type="button" class="btn btn-ghost btn-small" data-accion="editar-premios">Poner premios</button>';
+
+    let hint = 'Premio por acertante de cada categoría. Llegan solos de loteriasapi.com cuando se publica el escrutinio (normalmente lunes o martes).';
+    if (editando) hint = 'Pon el premio por acertante (en euros) y, si quieres, el número de acertantes. Deja en blanco una categoría para borrarla. La API no cambia lo que pongáis a mano.';
+    else if (!hayPremios) hint = 'Todavía no hay premios. Llegarán solos de loteriasapi.com cuando se publique el escrutinio, o podéis ponerlos a mano.';
+    else if (hayManual) hint += ' Los marcados con * los ha puesto alguien a mano.';
+
+    return `
+      <div class="premios-wrap">
+        <div class="tab-header-row">
+          <h4>Premios de la jornada</h4>
+          <div class="resultados-acciones">${acciones}</div>
+        </div>
+        <p class="resultados-todos-hint">${hint}</p>
+        <div class="resultados-todos-tabla-scroll premios-tabla-wrap">
+          <table class="resultados-todos-tabla premios-tabla">
+            <thead><tr><th>Categoría</th><th>Acertantes</th><th>Premio</th></tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  async function guardarPremios(bloque, jornadaId) {
+    const entrada = {};
+    for (const c of CATEGORIAS_PREMIO) {
+      const inputImporte = bloque.querySelector(`[data-premio-importe="${c}"]`);
+      const inputAcertantes = bloque.querySelector(`[data-premio-acertantes="${c}"]`);
+      const textoImporte = inputImporte.value.trim();
+      const textoAcertantes = inputAcertantes.value.trim().replace(/\./g, '');
+      const importe = textoImporte === '' ? null : leerEuros(textoImporte);
+      if (importe === null && textoImporte !== '') {
+        alert(`El premio de ${nombreCategoria(c)} no es válido. Usa por ejemplo 12,50.`);
+        inputImporte.focus();
+        return;
+      }
+      if (importe !== null && importe < 0) {
+        alert(`El premio de ${nombreCategoria(c)} no puede ser negativo.`);
+        inputImporte.focus();
+        return;
+      }
+      if (textoAcertantes !== '' && !/^\d+$/.test(textoAcertantes)) {
+        alert(`Los acertantes de ${nombreCategoria(c)} tienen que ser un número entero.`);
+        inputAcertantes.focus();
+        return;
+      }
+      entrada[c] = { premio_centimos: importe, acertantes: textoAcertantes === '' ? null : Number(textoAcertantes) };
+    }
+    try {
+      await api(`/api/jornada/${jornadaId}/premios`, { method: 'POST', body: JSON.stringify({ premios: entrada }) });
+      editandoPremios.delete(jornadaId);
+      if (bloque.closest('#tab-historial')) await cargarHistorial(jornadaId);
+      else await cargarJornada();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true, editable = false, plenoDefinitivo = null, editandoDefinitivo = false, premios = null } = {}) {
     const aciertos = Object.fromEntries(usuarios.map((u) => [u, 0]));
     const conResultado = partidos.filter((p) => p.resultado).length;
 
@@ -642,6 +792,7 @@
         <td class="col-resultado">${conResultado}/${partidos.length}</td>
         ${usuarios.map((u) => `<td>${aciertos[u]}/${conResultado}</td>`).join('')}
       </tr>
+      ${premios ? htmlFilaPremio(usuarios, partidos, premios, plenoDefinitivo, conColumnaResultado) : ''}
     `;
 
     return { cabecera, cuerpo, pie };
