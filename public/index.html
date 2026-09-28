@@ -69,58 +69,33 @@
       <!-- JORNADA -->
       <div id="tab-jornada" class="tab-panel">
         <div class="tab-header-row">
-          <h2 id="jornada-titulo">Jornada</h2>
-          <button id="btn-toggle-editor-jornada" class="btn btn-ghost btn-small">Editar partidos</button>
+          <h2>Jornada</h2>
+          <button id="btn-crear-manual" class="btn btn-ghost btn-small">Crear jornada manualmente</button>
         </div>
 
-        <div id="jornada-sin-datos" class="empty-state" hidden>
-          <p>Todavía no se ha cargado ninguna jornada. Puedes introducir los partidos manualmente.</p>
-        </div>
-
-        <form id="form-jornada-editor" class="jornada-editor" hidden>
+        <!-- Solo por si la API de loteriasapi.com no funciona -->
+        <form id="form-jornada-manual" class="jornada-editor" hidden>
           <label>
-            Número de jornada
-            <input id="jornada-numero" type="text" placeholder="Ej: 5" />
+            Título
+            <input id="manual-titulo" type="text" maxlength="80" placeholder="Ej: Jornada 10" />
           </label>
-          <label>
-            Temporada (opcional)
-            <input id="jornada-temporada" type="text" placeholder="Ej: 2026/2027" />
-          </label>
-          <div id="jornada-editor-partidos" class="jornada-editor-partidos"></div>
+          <div id="manual-partidos" class="jornada-editor-partidos"></div>
           <fieldset class="pleno-editor">
             <legend>Pleno al 15</legend>
-            <input id="pleno-local" type="text" placeholder="Equipo local" />
-            <input id="pleno-visitante" type="text" placeholder="Equipo visitante" />
+            <input id="manual-pleno-local" type="text" placeholder="Equipo local" />
+            <input id="manual-pleno-visitante" type="text" placeholder="Equipo visitante" />
           </fieldset>
-          <button type="submit" class="btn btn-primary">Guardar jornada</button>
+          <div class="jornada-editor-acciones">
+            <button type="button" id="btn-cancelar-manual" class="btn btn-ghost">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Crear jornada</button>
+          </div>
         </form>
 
-        <div id="jornada-tabla-wrap" hidden>
-          <table class="jornada-tabla">
-            <thead>
-              <tr><th>#</th><th>Partido</th><th>1</th><th>X</th><th>2</th></tr>
-            </thead>
-            <tbody id="jornada-tabla-body"></tbody>
-          </table>
-          <div id="pleno-form" class="pleno-form"></div>
-          <button id="btn-guardar-predicciones" class="btn btn-primary">Guardar mis pronósticos</button>
-          <p id="guardar-ok" class="ok-msg" hidden>¡Guardado!</p>
+        <!-- Jornadas creadas a mano (encima de la de la API) -->
+        <div id="jornadas-manuales"></div>
 
-          <h3>¿Quién ha rellenado ya?</h3>
-          <ul id="jornada-estado" class="estado-lista"></ul>
-
-          <div class="resultados-todos-wrap">
-            <h3>Resultados de todos</h3>
-            <p class="resultados-todos-hint">Lo que ha puesto cada uno. En verde los aciertos y en rojo los fallos, según se van conociendo los resultados.</p>
-            <div class="resultados-todos-tabla-scroll">
-              <table class="resultados-todos-tabla">
-                <thead id="resultados-todos-cabecera"></thead>
-                <tbody id="resultados-todos-cuerpo"></tbody>
-                <tfoot id="resultados-todos-pie"></tfoot>
-              </table>
-            </div>
-          </div>
-        </div>
+        <!-- Jornada de la API -->
+        <div id="jornada-api"></div>
       </div>
 
       <!-- HISTORIAL -->

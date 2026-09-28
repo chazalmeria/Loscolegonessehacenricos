@@ -1,6 +1,7 @@
 // Sincroniza la app con loteriasapi.com:
 //   1. Si la API ya publica una jornada nueva (sus 15 partidos), la crea como
-//      jornada activa. La anterior pasa sola al Historial.
+//      jornada activa. La anterior de la API pasa sola al Historial. Las
+//      jornadas creadas a mano (manual = 1) no se tocan nunca.
 //   2. Rellena el resultado real de cada partido (signo 1/X/2 y, en el Pleno
 //      al 15, los goles) en todas las jornadas enlazadas con la API.
 //
@@ -17,38 +18,6 @@ function temporadaDe(fecha) {
   const [y, m] = fecha.split('-').map(Number);
   const inicio = m >= 7 ? y : y - 1;
   return `${inicio}/${String((inicio + 1) % 100).padStart(2, '0')}`;
-}
-
-// Palabras significativas de un nombre de equipo: "R. Valladolid" -> ["valladolid"]
-function palabras(nombre) {
-  return String(nombre || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\(.*?\)/g, ' ')
-    .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 4);
-}
-
-function mismoEquipo(a, b) {
-  const pa = palabras(a);
-  const pb = new Set(palabras(b));
-  return pa.some((w) => pb.has(w));
-}
-
-// Una jornada metida a mano (o por la tarea antigua) que tiene los mismos
-// partidos que el sorteo de la API: se enlaza en vez de crear otra, para no
-// perder los pronosticos que ya se hayan puesto.
-function esLaMismaJornada(partidosDb, resultado) {
-  let coincidencias = 0;
-  for (const p of partidosDb) {
-    const posicion = p.es_pleno ? 15 : p.orden;
-    const api = resultado.partidos.find((x) => x.posicion === posicion);
-    if (api && mismoEquipo(p.equipo_local, api.local) && mismoEquipo(p.equipo_visitante, api.visitante)) {
-      coincidencias++;
-    }
-  }
-  return coincidencias >= 10;
 }
 
 async function aplicarResultados(jornadaId, resultado) {
@@ -77,7 +46,7 @@ async function crearJornada(resultado) {
   }
 
   return db.tx(async (t) => {
-    await t.run('UPDATE jornadas SET activa = 0 WHERE activa = 1');
+    await t.run('UPDATE jornadas SET activa = 0 WHERE activa = 1 AND manual = 0');
     const info = await t.run(
       'INSERT INTO jornadas (numero, temporada, activa, draw_id, draw_date) VALUES (?, ?, 1, ?, ?)',
       [String(numero || resultado.drawDate), temporadaDe(resultado.drawDate), resultado.drawId, resultado.drawDate]
@@ -95,7 +64,7 @@ async function crearJornada(resultado) {
 }
 
 async function sincronizar() {
-  const resumen = { jornadaNueva: null, jornadaEnlazada: null, resultadosActualizados: 0 };
+  const resumen = { jornadaNueva: null, resultadosActualizados: 0 };
   const resultados = await loterias.ultimosResultados(3);
   if (resultados.length === 0) return resumen;
 
@@ -103,25 +72,12 @@ async function sincronizar() {
   const reciente = resultados[0];
   const yaEsta = await db.get('SELECT id FROM jornadas WHERE draw_id = ?', [reciente.drawId]);
   if (!yaEsta) {
-    const activa = await db.get('SELECT * FROM jornadas WHERE activa = 1 ORDER BY id DESC LIMIT 1');
-    const partidosActiva = activa
-      ? await db.all('SELECT * FROM partidos WHERE jornada_id = ?', [activa.id])
-      : [];
-
-    if (activa && !activa.draw_id && esLaMismaJornada(partidosActiva, reciente)) {
-      await db.run('UPDATE jornadas SET draw_id = ?, draw_date = ? WHERE id = ?', [
-        reciente.drawId,
-        reciente.drawDate,
-        activa.id,
-      ]);
-      resumen.jornadaEnlazada = activa.id;
-    } else {
-      // No pisamos una jornada activa mas nueva que el sorteo de la API
-      // (por ejemplo, una que alguien haya metido a mano por adelantado).
-      const fechaActiva = activa && (activa.draw_date || String(activa.created_at).slice(0, 10));
-      if (!activa || fechaActiva < reciente.drawDate) {
-        resumen.jornadaNueva = await crearJornada(reciente);
-      }
+    // No pisamos una jornada de la API mas nueva que este sorteo
+    const activa = await db.get(
+      'SELECT draw_date FROM jornadas WHERE activa = 1 AND manual = 0 ORDER BY id DESC LIMIT 1'
+    );
+    if (!activa || !activa.draw_date || activa.draw_date < reciente.drawDate) {
+      resumen.jornadaNueva = await crearJornada(reciente);
     }
   }
 

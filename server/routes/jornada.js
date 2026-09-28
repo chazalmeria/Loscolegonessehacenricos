@@ -5,24 +5,16 @@ const { requireAuth, USERS } = require('../auth');
 
 const router = express.Router();
 
-async function getActiveJornada() {
-  return db.get('SELECT * FROM jornadas WHERE activa = 1 ORDER BY id DESC LIMIT 1');
+// Jornadas abiertas (activa = 1): las creadas a mano primero (mas nueva
+// arriba) y despues la de la API.
+async function getJornadasAbiertas() {
+  return db.all('SELECT * FROM jornadas WHERE activa = 1 ORDER BY manual DESC, id DESC');
 }
 
 async function getPartidos(jornadaId) {
   return db.all(
     'SELECT * FROM partidos WHERE jornada_id = ? ORDER BY es_pleno ASC, orden ASC',
     [jornadaId]
-  );
-}
-
-async function getPrediccionesDe(username, jornadaId) {
-  return db.all(
-    `SELECT p.id as partido_id, pr.pronostico
-     FROM partidos p
-     LEFT JOIN predicciones pr ON pr.partido_id = p.id AND pr.username = ?
-     WHERE p.jornada_id = ?`,
-    [username, jornadaId]
   );
 }
 
@@ -42,59 +34,51 @@ async function getPrediccionesDeTodos(jornadaId) {
   return mapa;
 }
 
-async function estadoDeTodos(jornadaId) {
-  const totalRow = await db.get('SELECT COUNT(*) as n FROM partidos WHERE jornada_id = ?', [jornadaId]);
-  const total = totalRow.n;
-
-  const estado = [];
-  for (const username of USERS) {
-    const rellenadosRow = await db.get(
-      `SELECT COUNT(*) as n FROM predicciones pr
-       JOIN partidos p ON p.id = pr.partido_id
-       WHERE p.jornada_id = ? AND pr.username = ? AND pr.pronostico IS NOT NULL AND pr.pronostico != ''`,
-      [jornadaId, username]
-    );
-    const rellenados = rellenadosRow.n;
-    estado.push({ username, completado: total > 0 && rellenados >= total, rellenados, total });
-  }
-  return estado;
+function estadoDeTodos(partidos, prediccionesDeTodos) {
+  const total = partidos.length;
+  return USERS.map((username) => {
+    const rellenados = partidos.filter((p) => {
+      const valor = prediccionesDeTodos[p.id] && prediccionesDeTodos[p.id][username];
+      return valor && valor !== '';
+    }).length;
+    return { username, completado: total > 0 && rellenados >= total, rellenados, total };
+  });
 }
 
-// Jornada activa + partidos + mis predicciones + estado de todos los usuarios
+// Todas las jornadas abiertas, cada una con sus partidos, mis pronosticos y
+// el estado de todos los usuarios
 router.get('/current', requireAuth, async (req, res, next) => {
   try {
     await sync.sincronizarSiToca();
-    const jornada = await getActiveJornada();
-    if (!jornada) return res.json({ jornada: null });
 
-    const partidos = await getPartidos(jornada.id);
-    const misPredicciones = await getPrediccionesDe(req.username, jornada.id);
-    const mapa = Object.fromEntries(misPredicciones.map((p) => [p.partido_id, p.pronostico]));
-    const prediccionesDeTodos = await getPrediccionesDeTodos(jornada.id);
-    const partidosConMiPronostico = partidos.map((p) => ({
-      ...p,
-      mi_pronostico: mapa[p.id] || '',
-      predicciones: prediccionesDeTodos[p.id] || {},
-    }));
+    const jornadas = [];
+    for (const jornada of await getJornadasAbiertas()) {
+      const partidos = await getPartidos(jornada.id);
+      const prediccionesDeTodos = await getPrediccionesDeTodos(jornada.id);
+      jornadas.push({
+        jornada: { ...jornada, manual: !!jornada.manual },
+        partidos: partidos.map((p) => {
+          const predicciones = prediccionesDeTodos[p.id] || {};
+          return { ...p, mi_pronostico: predicciones[req.username] || '', predicciones };
+        }),
+        estado: estadoDeTodos(partidos, prediccionesDeTodos),
+      });
+    }
 
-    res.json({
-      jornada,
-      partidos: partidosConMiPronostico,
-      usuarios: USERS,
-      estado: await estadoDeTodos(jornada.id),
-    });
+    res.json({ usuarios: USERS, jornadas });
   } catch (err) {
     next(err);
   }
 });
 
-// Crear/editar la jornada de la semana (cualquier usuario logueado puede hacerlo)
+// Crear una jornada a mano (por si la API no funciona). Convive con la de la
+// API, que no se toca.
 router.post('/', requireAuth, async (req, res, next) => {
   try {
-    const { numero, temporada, partidos, pleno } = req.body || {};
+    const { titulo, partidos, pleno } = req.body || {};
 
-    if (!numero || !Array.isArray(partidos) || partidos.length === 0) {
-      return res.status(400).json({ error: 'Faltan datos: numero y partidos son obligatorios' });
+    if (!titulo || !String(titulo).trim() || !Array.isArray(partidos) || partidos.length === 0) {
+      return res.status(400).json({ error: 'Faltan datos: el título y al menos un partido son obligatorios' });
     }
     for (const p of partidos) {
       if (!p || !p.local || !p.visitante) {
@@ -103,11 +87,8 @@ router.post('/', requireAuth, async (req, res, next) => {
     }
 
     const jornadaId = await db.tx(async (t) => {
-      await t.run('UPDATE jornadas SET activa = 0 WHERE activa = 1');
-
-      const info = await t.run('INSERT INTO jornadas (numero, temporada, activa) VALUES (?, ?, 1)', [
-        String(numero),
-        temporada || null,
+      const info = await t.run('INSERT INTO jornadas (numero, activa, manual) VALUES (?, 1, 1)', [
+        String(titulo).trim(),
       ]);
       const id = info.lastInsertRowid;
 
@@ -135,16 +116,29 @@ router.post('/', requireAuth, async (req, res, next) => {
   }
 });
 
-// Guardar mis pronosticos para la jornada activa
+// Pasar una jornada creada a mano al Historial
+router.post('/:id/archivar', requireAuth, async (req, res, next) => {
+  try {
+    const info = await db.run('UPDATE jornadas SET activa = 0 WHERE id = ? AND manual = 1 AND activa = 1', [
+      Number(req.params.id),
+    ]);
+    if (!info.changes) return res.status(404).json({ error: 'No hay ninguna jornada a mano abierta con ese id' });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Guardar mis pronosticos de una jornada abierta
 router.post('/predicciones', requireAuth, async (req, res, next) => {
   try {
-    const { predicciones } = req.body || {};
+    const { jornada_id: jornadaId, predicciones } = req.body || {};
     if (!predicciones || typeof predicciones !== 'object') {
       return res.status(400).json({ error: 'Formato invalido' });
     }
 
-    const jornada = await getActiveJornada();
-    if (!jornada) return res.status(400).json({ error: 'No hay jornada activa' });
+    const jornada = await db.get('SELECT id FROM jornadas WHERE id = ? AND activa = 1', [Number(jornadaId)]);
+    if (!jornada) return res.status(400).json({ error: 'Esa jornada ya no está abierta' });
 
     const partidos = await getPartidos(jornada.id);
     const partidoIds = new Set(partidos.map((p) => p.id));
@@ -169,4 +163,4 @@ router.post('/predicciones', requireAuth, async (req, res, next) => {
   }
 });
 
-module.exports = { router, getActiveJornada, getPartidos };
+module.exports = { router };

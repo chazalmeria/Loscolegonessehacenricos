@@ -149,52 +149,169 @@
   });
 
   // ---------- JORNADA ----------
-  let jornadaActualId = null;
+  // Puede haber varias jornadas abiertas a la vez: las creadas a mano (arriba)
+  // y la que llega de loteriasapi.com. Cada una se pinta en su propio bloque.
+  let usuariosJornada = [];
 
   async function cargarJornada() {
     try {
       const data = await api('/api/jornada/current');
-      if (!data.jornada) {
-        jornadaActualId = null;
-        $('#jornada-sin-datos').hidden = false;
-        $('#jornada-tabla-wrap').hidden = true;
-        mostrarEditorJornada(true);
-        prepararEditorVacio();
-        return;
-      }
-      jornadaActualId = data.jornada.id;
-      $('#jornada-sin-datos').hidden = true;
-      $('#jornada-titulo').textContent = `Jornada ${data.jornada.numero}` + (data.jornada.temporada ? ` (${data.jornada.temporada})` : '');
-      pintarTablaJornada(data.partidos || []);
-      pintarEstado(data.estado || []);
-      // Aislado en su propio try/catch: si esto fallase, no debe tumbar el resto de la pestaña Jornada.
-      try {
-        pintarResultadosDeTodos(data.usuarios || [], data.partidos || []);
-      } catch (e) {
-        console.error('No se pudo pintar "Resultados de todos":', e);
-      }
-      $('#jornada-tabla-wrap').hidden = false;
-      mostrarEditorJornada(false);
-      prepararEditorVacio();
+      usuariosJornada = data.usuarios || [];
+      const jornadas = data.jornadas || [];
+      const manuales = jornadas.filter((j) => j.jornada.manual);
+      const deLaApi = jornadas.find((j) => !j.jornada.manual);
+
+      $('#jornadas-manuales').innerHTML = manuales.map(htmlBloqueJornada).join('');
+      $('#jornada-api').innerHTML = deLaApi
+        ? htmlBloqueJornada(deLaApi)
+        : `<div class="empty-state"><p>Todavía no hay jornada de la API. En cuanto loteriasapi.com publique los partidos aparecerá aquí sola. Si no funciona, usa "Crear jornada manualmente".</p></div>`;
     } catch (e) {
       console.error('Error cargando la jornada:', e);
     }
   }
 
-  function mostrarEditorJornada(forzarVisible) {
-    $('#form-jornada-editor').hidden = !forzarVisible;
+  // Titulo en HTML: "Jornada 9 (2026/27)" o, si se creo a mano, "<titulo> (a mano)"
+  function tituloJornada(j) {
+    return j.manual
+      ? `${escapeHtml(j.numero)} <span class="etiqueta-manual">(a mano)</span>`
+      : `Jornada ${escapeHtml(j.numero)}${j.temporada ? ` (${escapeHtml(j.temporada)})` : ''}`;
   }
 
-  $('#btn-toggle-editor-jornada').addEventListener('click', () => {
-    const editor = $('#form-jornada-editor');
-    editor.hidden = !editor.hidden;
+  function htmlBloqueJornada({ jornada, partidos, estado }) {
+    const filas = partidos.filter((p) => !p.es_pleno).map((p) => `
+      <tr>
+        <td>${p.orden}</td>
+        <td>${escapeHtml(p.equipo_local)} - ${escapeHtml(p.equipo_visitante)}</td>
+        ${['1', 'X', '2'].map((v) => `
+          <td><input type="radio" name="partido-${p.id}" value="${v}" ${p.mi_pronostico === v ? 'checked' : ''} /></td>
+        `).join('')}
+      </tr>
+    `).join('');
+
+    const pleno = partidos.find((p) => p.es_pleno);
+    let plenoHtml = '';
+    if (pleno) {
+      const [gl, gv] = (pleno.mi_pronostico || '').split('-');
+      plenoHtml = `
+        <div class="pleno-form" data-pleno-id="${pleno.id}">
+          <strong>Pleno al 15:</strong> ${escapeHtml(pleno.equipo_local)}
+          <input type="number" min="0" data-goles="local" value="${escapeHtml(gl || '')}" />
+          -
+          <input type="number" min="0" data-goles="visitante" value="${escapeHtml(gv || '')}" />
+          ${escapeHtml(pleno.equipo_visitante)}
+        </div>
+      `;
+    }
+
+    const estadoHtml = (estado || []).map((u) => `
+      <li class="${u.completado ? 'completado' : ''}">${escapeHtml(u.username)}: ${u.rellenados}/${u.total}${u.completado ? ' ✓' : ''}</li>
+    `).join('');
+
+    const tabla = htmlTablaResultados(usuariosJornada, partidos, { conColumnaResultado: !jornada.manual });
+    const hint = jornada.manual
+      ? 'Lo que ha puesto cada uno. Si alguien no lo ha rellenado, se queda vacío.'
+      : 'Lo que ha puesto cada uno. En verde los aciertos y en rojo los fallos, según se van conociendo los resultados.';
+
+    return `
+      <section class="jornada-bloque${jornada.manual ? ' jornada-bloque-manual' : ''}" data-jornada-id="${jornada.id}">
+        <div class="tab-header-row">
+          <h3 class="jornada-bloque-titulo">${tituloJornada(jornada)}</h3>
+          ${jornada.manual ? '<button type="button" class="btn btn-ghost btn-small" data-accion="archivar">Añadir al histórico</button>' : ''}
+        </div>
+        <table class="jornada-tabla">
+          <thead>
+            <tr><th>#</th><th>Partido</th><th>1</th><th>X</th><th>2</th></tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+        ${plenoHtml}
+        <button type="button" class="btn btn-primary btn-guardar" data-accion="guardar">Guardar mis pronósticos</button>
+        <p class="ok-msg" data-guardado hidden>¡Guardado!</p>
+
+        <h4>¿Quién ha rellenado ya?</h4>
+        <ul class="estado-lista">${estadoHtml}</ul>
+
+        <div class="resultados-todos-wrap">
+          <h4>Resultados de todos</h4>
+          <p class="resultados-todos-hint">${hint}</p>
+          <div class="resultados-todos-tabla-scroll">
+            <table class="resultados-todos-tabla">
+              <thead>${tabla.cabecera}</thead>
+              <tbody>${tabla.cuerpo}</tbody>
+              <tfoot>${tabla.pie}</tfoot>
+            </table>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // Botones de cada bloque (Guardar / Añadir al historico)
+  $('#tab-jornada').addEventListener('click', async (e) => {
+    const boton = e.target.closest('[data-accion]');
+    if (!boton) return;
+    const bloque = boton.closest('.jornada-bloque');
+    const jornadaId = Number(bloque.dataset.jornadaId);
+    if (boton.dataset.accion === 'guardar') await guardarPronosticos(bloque, jornadaId);
+    if (boton.dataset.accion === 'archivar') await archivarJornada(bloque, jornadaId);
   });
 
-  function prepararEditorVacio() {
-    const wrap = $('#jornada-editor-partidos');
+  async function guardarPronosticos(bloque, jornadaId) {
+    const predicciones = {};
+    bloque.querySelectorAll('.jornada-tabla input[type="radio"]:checked').forEach((radio) => {
+      predicciones[radio.name.replace('partido-', '')] = radio.value;
+    });
+    const pleno = bloque.querySelector('[data-pleno-id]');
+    if (pleno) {
+      const gl = pleno.querySelector('[data-goles="local"]').value;
+      const gv = pleno.querySelector('[data-goles="visitante"]').value;
+      if (gl !== '' && gv !== '') predicciones[pleno.dataset.plenoId] = `${gl}-${gv}`;
+    }
+
+    try {
+      await api('/api/jornada/predicciones', {
+        method: 'POST',
+        body: JSON.stringify({ jornada_id: jornadaId, predicciones }),
+      });
+      await cargarJornada();
+      const ok = $(`.jornada-bloque[data-jornada-id="${jornadaId}"] [data-guardado]`);
+      if (ok) {
+        ok.hidden = false;
+        setTimeout(() => (ok.hidden = true), 2000);
+      }
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function archivarJornada(bloque, jornadaId) {
+    const titulo = bloque.querySelector('.jornada-bloque-titulo').textContent.trim();
+    if (!confirm(`¿Pasar "${titulo}" al histórico? Ya no se podrán cambiar los pronósticos.`)) return;
+    try {
+      await api(`/api/jornada/${jornadaId}/archivar`, { method: 'POST' });
+      await cargarJornada();
+      await cargarHistorial();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  // ---------- CREAR JORNADA A MANO (por si la API no funciona) ----------
+  const PARTIDOS_MANUAL = 14; // + el Pleno al 15, que va aparte
+
+  $('#btn-crear-manual').addEventListener('click', () => {
+    prepararFormularioManual();
+    $('#form-jornada-manual').hidden = false;
+    $('#manual-titulo').focus();
+  });
+
+  $('#btn-cancelar-manual').addEventListener('click', cerrarFormularioManual);
+
+  function prepararFormularioManual() {
+    const wrap = $('#manual-partidos');
     if (wrap.dataset.listo) return;
     wrap.innerHTML = '';
-    for (let i = 1; i <= 15; i++) {
+    for (let i = 1; i <= PARTIDOS_MANUAL; i++) {
       const row = document.createElement('div');
       row.className = 'partido-editor-row';
       row.innerHTML = `
@@ -207,21 +324,26 @@
     wrap.dataset.listo = '1';
   }
 
-  $('#form-jornada-editor').addEventListener('submit', async (e) => {
+  function cerrarFormularioManual() {
+    const form = $('#form-jornada-manual');
+    form.reset();
+    form.hidden = true;
+  }
+
+  $('#form-jornada-manual').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const numero = $('#jornada-numero').value.trim();
-    const temporada = $('#jornada-temporada').value.trim();
+    const titulo = $('#manual-titulo').value.trim();
     const partidos = [];
-    for (let i = 0; i < 15; i++) {
-      const local = $(`input[data-idx="${i}"][data-campo="local"]`).value.trim();
-      const visitante = $(`input[data-idx="${i}"][data-campo="visitante"]`).value.trim();
+    for (let i = 0; i < PARTIDOS_MANUAL; i++) {
+      const local = $(`#manual-partidos input[data-idx="${i}"][data-campo="local"]`).value.trim();
+      const visitante = $(`#manual-partidos input[data-idx="${i}"][data-campo="visitante"]`).value.trim();
       if (local && visitante) partidos.push({ local, visitante });
     }
-    const plenoLocal = $('#pleno-local').value.trim();
-    const plenoVisitante = $('#pleno-visitante').value.trim();
+    const plenoLocal = $('#manual-pleno-local').value.trim();
+    const plenoVisitante = $('#manual-pleno-visitante').value.trim();
 
-    if (!numero || partidos.length === 0) {
-      alert('Pon al menos el número de jornada y un partido.');
+    if (!titulo || partidos.length === 0) {
+      alert('Pon al menos un título y un partido.');
       return;
     }
 
@@ -229,69 +351,17 @@
       await api('/api/jornada', {
         method: 'POST',
         body: JSON.stringify({
-          numero,
-          temporada,
+          titulo,
           partidos,
           pleno: plenoLocal && plenoVisitante ? { local: plenoLocal, visitante: plenoVisitante } : null,
         }),
       });
-      e.target.reset();
-      $('#jornada-editor-partidos').dataset.listo = '';
+      cerrarFormularioManual();
       await cargarJornada();
     } catch (err) {
       alert(err.message);
     }
   });
-
-  function pintarTablaJornada(partidos) {
-    const body = $('#jornada-tabla-body');
-    body.innerHTML = '';
-    const plenoWrap = $('#pleno-form');
-    plenoWrap.innerHTML = '';
-
-    partidos.filter((p) => !p.es_pleno).forEach((p) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${p.orden}</td>
-        <td>${escapeHtml(p.equipo_local)} - ${escapeHtml(p.equipo_visitante)}</td>
-        ${['1', 'X', '2'].map((v) => `
-          <td><input type="radio" name="partido-${p.id}" value="${v}" ${p.mi_pronostico === v ? 'checked' : ''} /></td>
-        `).join('')}
-      `;
-      body.appendChild(tr);
-    });
-
-    const pleno = partidos.find((p) => p.es_pleno);
-    if (pleno) {
-      const [gl, gv] = (pleno.mi_pronostico || '-').split('-');
-      plenoWrap.innerHTML = `
-        <strong>Pleno al 15:</strong> ${escapeHtml(pleno.equipo_local)}
-        <input type="number" min="0" id="pleno-goles-local" value="${gl && gl !== '-' ? gl : ''}" />
-        -
-        <input type="number" min="0" id="pleno-goles-visitante" value="${gv || ''}" />
-        ${escapeHtml(pleno.equipo_visitante)}
-        <input type="hidden" id="pleno-partido-id" value="${pleno.id}" />
-      `;
-    }
-  }
-
-  function pintarEstado(estado) {
-    const ul = $('#jornada-estado');
-    ul.innerHTML = '';
-    estado.forEach((u) => {
-      const li = document.createElement('li');
-      li.className = u.completado ? 'completado' : '';
-      li.textContent = `${u.username}: ${u.rellenados}/${u.total}${u.completado ? ' ✓' : ''}`;
-      ul.appendChild(li);
-    });
-  }
-
-  function pintarResultadosDeTodos(usuarios, partidos) {
-    const tabla = htmlTablaResultados(usuarios, partidos);
-    $('#resultados-todos-cabecera').innerHTML = tabla.cabecera;
-    $('#resultados-todos-cuerpo').innerHTML = tabla.cuerpo;
-    $('#resultados-todos-pie').innerHTML = tabla.pie;
-  }
 
   // ---------- COMPROBACION DE RESULTADOS ----------
   // Pleno al 15: se juega por goles de cada equipo en 0, 1, 2 o M (3 o mas).
@@ -318,21 +388,22 @@
   }
 
   // Tabla "Resultados de todos" (partido x usuario) usada en Jornada y en Historial.
-  function htmlTablaResultados(usuarios, partidos) {
+  // Las jornadas creadas a mano no reciben resultados de la API: sin columna Resultado.
+  function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true } = {}) {
     const aciertos = Object.fromEntries(usuarios.map((u) => [u, 0]));
     const conResultado = partidos.filter((p) => p.resultado).length;
 
     const cabecera = `
       <tr>
         <th>Partido</th>
-        <th class="col-resultado">Resultado</th>
+        ${conColumnaResultado ? `<th class="col-resultado">Resultado</th>` : ""}
         ${usuarios.map((u) => `<th>${escapeHtml(u)}</th>`).join('')}
       </tr>
     `;
 
     const cuerpo = partidos.map((p) => {
       const etiqueta = (p.es_pleno ? 'Pleno al 15: ' : '') + `${escapeHtml(p.equipo_local)} - ${escapeHtml(p.equipo_visitante)}`;
-      const resultado = p.resultado
+      const resultado = !conColumnaResultado ? "" : p.resultado
         ? `<td class="col-resultado">${escapeHtml(p.resultado)}</td>`
         : `<td class="col-resultado valor-vacio" title="Aún sin resultado">·</td>`;
       const celdas = usuarios.map((u) => {
@@ -357,46 +428,6 @@
     return { cabecera, cuerpo, pie };
   }
 
-  $('#btn-guardar-predicciones').addEventListener('click', async () => {
-    if (!jornadaActualId) return;
-    const predicciones = {};
-    $$('#jornada-tabla-body tr').forEach((tr) => {
-      const checked = tr.querySelector('input[type="radio"]:checked');
-      if (checked) {
-        const partidoId = checked.name.replace('partido-', '');
-        predicciones[partidoId] = checked.value;
-      }
-    });
-    const plenoIdInput = $('#pleno-partido-id');
-    if (plenoIdInput) {
-      const gl = $('#pleno-goles-local').value;
-      const gv = $('#pleno-goles-visitante').value;
-      if (gl !== '' && gv !== '') {
-        predicciones[plenoIdInput.value] = `${gl}-${gv}`;
-      }
-    }
-
-    try {
-      await api('/api/jornada/predicciones', {
-        method: 'POST',
-        body: JSON.stringify({ predicciones }),
-      });
-      $('#guardar-ok').hidden = false;
-      setTimeout(() => ($('#guardar-ok').hidden = true), 2000);
-      const data = await api('/api/jornada/current');
-      if (data.jornada) {
-        pintarEstado(data.estado || []);
-        try {
-          pintarResultadosDeTodos(data.usuarios || [], data.partidos || []);
-        } catch (e) {
-          console.error('No se pudo pintar "Resultados de todos":', e);
-        }
-      }
-    } catch (err) {
-      alert(err.message);
-    }
-  });
-
   // ---------- HISTORIAL (una pestaña por jornada cerrada, con la tabla de Resultados de todos) ----------
   async function cargarHistorial() {
     try {
@@ -412,7 +443,7 @@
 
       jornadas.forEach((j, idx) => {
         const btn = document.createElement('button');
-        btn.textContent = `Jornada ${j.numero}`;
+        btn.textContent = j.manual ? `${j.numero} (a mano)` : `Jornada ${j.numero}`;
         if (idx === 0) btn.classList.add('active');
         btn.addEventListener('click', () => {
           $$('#historial-tabs button').forEach((b) => b.classList.remove('active'));
@@ -435,10 +466,10 @@
       return;
     }
 
-    const { cabecera, cuerpo, pie } = htmlTablaResultados(usuarios, jornada.partidos);
+    const { cabecera, cuerpo, pie } = htmlTablaResultados(usuarios, jornada.partidos, { conColumnaResultado: !jornada.manual });
 
     cont.innerHTML = `
-      <h3>Jornada ${escapeHtml(jornada.numero)}${jornada.temporada ? ` (${escapeHtml(jornada.temporada)})` : ''}</h3>
+      <h3>${tituloJornada(jornada)}</h3>
       <div class="resultados-todos-tabla-scroll">
         <table class="resultados-todos-tabla">
           <thead>${cabecera}</thead>

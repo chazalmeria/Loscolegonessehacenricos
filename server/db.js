@@ -57,6 +57,10 @@ const MIGRACIONES = [
   'ALTER TABLE jornadas ADD COLUMN draw_id TEXT',   // id del sorteo en loteriasapi.com
   'ALTER TABLE jornadas ADD COLUMN draw_date TEXT', // fecha del sorteo (YYYY-MM-DD)
   'ALTER TABLE partidos ADD COLUMN resultado TEXT', // signo real (1/X/2) o, en el pleno, goles "2-1"
+  // 1 = creada a mano desde la pestaña Jornada (convive con la de la API y se
+  // pasa al Historial con el boton "Añadir al historico"). En ese caso "numero"
+  // guarda el titulo que le puso quien la creo.
+  'ALTER TABLE jornadas ADD COLUMN manual INTEGER NOT NULL DEFAULT 0',
   // Evita crear dos veces la misma jornada si dos peticiones sincronizan a la vez
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_jornadas_draw_id ON jornadas(draw_id)',
 ];
