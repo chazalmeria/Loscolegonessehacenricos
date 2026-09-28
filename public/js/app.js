@@ -1091,9 +1091,13 @@
     const nJornadas = `${jornadas.length} jornada${jornadas.length === 1 ? '' : 's'} del Historial`;
 
     if (rankingActivo === 'aciertos') {
-      const filas = rankingAciertos(usuarios, jornadas).map((f) => `
+      const ranking = rankingAciertos(usuarios, jornadas);
+      // El ultimo (o los ultimos, si empatan) se lleva el dedo acusatorio,
+      // salvo que esten todos empatados en el primer puesto
+      const ultimaPosicion = Math.max(...ranking.map((f) => f.posicion));
+      const filas = ranking.map((f) => `
         <tr>
-          <td class="ranking-posicion">${medalla(f.posicion)}</td>
+          <td class="ranking-posicion">${ultimaPosicion > 1 && f.posicion === ultimaPosicion ? '<span title="El último">🫵</span>' : medalla(f.posicion)}</td>
           <td>${escapeHtml(f.username)}</td>
           <td class="ranking-valor">${f.aciertos}</td>
           <td class="ranking-extra">${f.comprobados ? Math.round((f.aciertos / f.comprobados) * 100) : 0}%</td>
