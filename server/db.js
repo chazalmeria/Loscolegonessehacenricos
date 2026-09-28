@@ -63,6 +63,14 @@ const SCHEMA = [
     manual INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (jornada_id, aciertos)
   )`,
+  // Premio fijado a mano para un usuario en una jornada (manda sobre el
+  // calculado por categorias). Se uso para dejar a 0 las jornadas del Excel.
+  `CREATE TABLE IF NOT EXISTS premios_usuario (
+    jornada_id INTEGER NOT NULL REFERENCES jornadas(id) ON DELETE CASCADE,
+    username TEXT NOT NULL,
+    premio_centimos INTEGER NOT NULL,
+    PRIMARY KEY (jornada_id, username)
+  )`,
   `CREATE TABLE IF NOT EXISTS meta (
     clave TEXT PRIMARY KEY,
     valor TEXT

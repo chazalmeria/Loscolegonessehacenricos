@@ -10,6 +10,7 @@ App privada para el grupo: portada con acceso restringido, login compartido, cha
 - **Login**: 7 usuarios fijos (Burgos, Paquero, Jordan, Pepe, Largo, Joaquin, Miguel), todos con la contraseña `MaximianoGuapo`.
 - **Inicio**: chat entre todos los usuarios logueados (se actualiza solo cada 4 segundos).
 - **Jornada**: la jornada de La Quiniela llega sola desde loteriasapi.com (15 partidos + Pleno al 15) y cada usuario rellena su propia columna de pronósticos (1 / X / 2). Se ve quién ha completado ya su quiniela. Si la API falla, el botón "Crear jornada manualmente" crea otra jornada que aparece encima de la de la API, con su título y la etiqueta "(a mano)", y que se pasa al Historial con "Añadir al histórico".
+- **Rankings**: dos pestañas sobre las jornadas del Historial. "Aciertos": resultados acertados en total (incluido cada Pleno al 15) y % de acierto. "Dineros": premios acumulados por columna; mientras nadie haya ganado nada sale "Sois unos paquetes".
 - **Economía**: lo que lleva cada uno (+/-) en el bote común y el total. Se cambia a mano con "Modificar saldos" (cualquier usuario); se guarda quién y cuándo lo cambió por última vez.
 - **Historial**: una pestaña por usuario con todas sus jornadas pasadas y lo que pronosticó en cada una.
 - **Estadísticas**: vacía por ahora ("Próximamente"), lista para lo que se quiera añadir más adelante.

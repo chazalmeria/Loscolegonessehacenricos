@@ -419,6 +419,28 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
   color: var(--text);
 }
 
+/* RANKINGS */
+.ranking-wrap { max-width: 640px; }
+.ranking-tabla td.ranking-posicion { width: 3rem; font-size: 1.1rem; }
+.ranking-tabla td:nth-child(2) { text-align: left; font-weight: 600; }
+.ranking-tabla th:nth-child(2) { text-align: left; }
+.ranking-tabla td.ranking-valor { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ranking-tabla td.ranking-extra { color: var(--text-dim); }
+.ranking-tabla td.saldo-positivo { color: var(--primary-text); }
+.ranking-tabla td.saldo-cero { color: var(--text-dim); }
+.ranking-paquetes {
+  max-width: 640px;
+  margin: 1rem 0;
+  padding: 1.4rem 1rem;
+  text-align: center;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--danger);
+  background: var(--fail-bg);
+  border: 1px dashed var(--danger);
+  border-radius: var(--radius);
+}
+
 /* ECONOMIA */
 #tab-economia .resultados-todos-hint { margin-top: .4rem; }
 .economia-wrap { max-width: 640px; }

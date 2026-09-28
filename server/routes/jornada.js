@@ -64,6 +64,7 @@ router.get('/current', requireAuth, async (req, res, next) => {
         }),
         estado: estadoDeTodos(partidos, prediccionesDeTodos),
         premios: await premios.getPremios(jornada.id),
+        premios_usuario: await premios.getPremiosUsuario(jornada.id),
       });
     }
 
@@ -224,6 +225,44 @@ router.post('/:id/premios', requireAuth, async (req, res, next) => {
       for (const [sql, args] of ops) await t.run(sql, args);
     });
     res.json({ ok: true, cambiados: ops.length, premios: await premios.getPremios(jornada.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Fijar a mano el premio de uno o varios usuarios en una jornada (manda sobre
+// el calculado por categorias). Body: { premios: { Burgos: 0, Pepe: 1250 } } en
+// centimos; null quita el premio fijado y vuelve al calculado.
+router.post('/:id/premios-usuarios', requireAuth, async (req, res, next) => {
+  try {
+    const { premios: entrada } = req.body || {};
+    if (!entrada || typeof entrada !== 'object') return res.status(400).json({ error: 'Formato invalido' });
+
+    const jornada = await db.get('SELECT id FROM jornadas WHERE id = ?', [Number(req.params.id)]);
+    if (!jornada) return res.status(404).json({ error: 'Esa jornada no existe' });
+
+    const ops = [];
+    for (const [username, valor] of Object.entries(entrada)) {
+      if (!USERS.includes(username)) return res.status(400).json({ error: `Usuario desconocido: ${username}` });
+      if (valor === null) {
+        ops.push(['DELETE FROM premios_usuario WHERE jornada_id = ? AND username = ?', [jornada.id, username]]);
+        continue;
+      }
+      const centimos = Number(valor);
+      if (!Number.isSafeInteger(centimos) || centimos < 0) {
+        return res.status(400).json({ error: `Premio no válido para ${username}` });
+      }
+      ops.push([
+        `INSERT INTO premios_usuario (jornada_id, username, premio_centimos) VALUES (?, ?, ?)
+         ON CONFLICT(jornada_id, username) DO UPDATE SET premio_centimos = excluded.premio_centimos`,
+        [jornada.id, username, centimos],
+      ]);
+    }
+
+    await db.tx(async (t) => {
+      for (const [sql, args] of ops) await t.run(sql, args);
+    });
+    res.json({ ok: true, premios_usuario: await premios.getPremiosUsuario(jornada.id) });
   } catch (err) {
     next(err);
   }

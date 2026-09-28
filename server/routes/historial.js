@@ -44,6 +44,7 @@ router.get('/', requireAuth, async (req, res, next) => {
         manual: !!jornada.manual,
         pleno_definitivo: jornada.pleno_definitivo || null,
         premios: await premios.getPremios(jornada.id),
+        premios_usuario: await premios.getPremiosUsuario(jornada.id),
         partidos: partidos.map((p) => ({
           id: p.id,
           equipo_local: p.equipo_local,

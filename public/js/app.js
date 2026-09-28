@@ -104,6 +104,7 @@
       $(`#tab-${btn.dataset.tab}`).classList.add('active');
       // Economia se recarga al abrirla (otro puede haber cambiado los saldos), salvo si se esta editando
       if (btn.dataset.tab === 'economia' && !editandoEconomia) cargarEconomia();
+      if (btn.dataset.tab === 'rankings') cargarRankings();
     });
   });
 
@@ -185,8 +186,8 @@
       : `Jornada ${escapeHtml(j.numero)}${j.temporada ? ` (${escapeHtml(j.temporada)})` : ''}`;
   }
 
-  function htmlBloqueJornada({ jornada: datosJornada, partidos, estado, premios }) {
-    const jornada = { ...datosJornada, premios: premios || [] };
+  function htmlBloqueJornada({ jornada: datosJornada, partidos, estado, premios, premios_usuario: premiosUsuario }) {
+    const jornada = { ...datosJornada, premios: premios || [], premios_usuario: premiosUsuario || {} };
     const filas = partidos.filter((p) => !p.es_pleno).map((p) => `
       <tr>
         <td>${p.orden}</td>
@@ -252,7 +253,7 @@
       plenoDefinitivo: jornada.pleno_definitivo || null,
       editandoDefinitivo: editandoDefinitivo.has(jornada.id),
       conColumnaResultado: editable || !jornada.manual || partidos.some((p) => p.resultado),
-      premios: jornada.premios || [],
+      jornadaPremios: jornada,
     });
 
     let hint = 'Lo que ha puesto cada uno. En verde los aciertos y en rojo los fallos, según se van conociendo los resultados.';
@@ -639,26 +640,40 @@
     return { aciertos, categoria, pendientes };
   }
 
+  // Premio de un usuario en una jornada: el fijado a mano (premios_usuario) si
+  // lo hay; si no, el de su categoria segun la tabla de premios.
+  // importe = centimos, o null si todavia no se sabe.
+  function premioDeUsuario(jornada, partidos, usuario) {
+    const { categoria, pendientes } = categoriaDeUsuario(partidos, usuario, jornada.pleno_definitivo || null);
+    const fijado = jornada.premios_usuario && jornada.premios_usuario[usuario];
+    if (fijado !== undefined && fijado !== null) return { categoria, pendientes, importe: fijado, fijado: true };
+    if (!categoria) return { categoria, pendientes, importe: pendientes ? null : 0, fijado: false };
+    const premio = (jornada.premios || []).find((p) => p.aciertos === categoria);
+    const importe = premio && premio.premio_centimos !== null ? premio.premio_centimos : null;
+    return { categoria, pendientes, importe, fijado: false };
+  }
+
   // Fila "Premio" del pie: categoria e importe de cada columna, y el total del bote
-  function htmlFilaPremio(usuarios, partidos, premios, plenoDefinitivo, conColumnaResultado) {
+  function htmlFilaPremio(usuarios, partidos, jornada, conColumnaResultado) {
     if (!partidos.some((p) => !p.es_pleno && p.resultado)) return '';
-    const porCategoria = Object.fromEntries((premios || []).map((p) => [p.aciertos, p]));
     let total = 0;
     let totalConocido = true;
     let provisional = false;
 
     const celdas = usuarios.map((u) => {
-      const { categoria, pendientes } = categoriaDeUsuario(partidos, u, plenoDefinitivo);
-      if (pendientes) provisional = true;
-      if (!categoria) return `<td class="premio-celda valor-vacio">${pendientes ? '…' : '—'}</td>`;
-      const premio = porCategoria[categoria];
-      const importe = premio && premio.premio_centimos !== null ? premio.premio_centimos : null;
+      const { categoria, pendientes, importe, fijado } = premioDeUsuario(jornada, partidos, u);
+      if (pendientes && !fijado) provisional = true;
       if (importe === null) totalConocido = false;
       else total += importe;
+      const textoImporte = importe !== null ? euros(importe).replace('+', '') : '';
+      if (fijado) {
+        return `<td class="premio-celda${importe > 0 ? ' con-premio' : ' valor-vacio'}" title="Premio puesto a mano">${textoImporte}</td>`;
+      }
+      if (!categoria) return `<td class="premio-celda valor-vacio">${pendientes ? '…' : '—'}</td>`;
       return `
         <td class="premio-celda con-premio" title="${escapeHtml(nombreCategoria(categoria))}">
           <span class="premio-categoria">${categoria === 15 ? 'P15' : categoria}</span>
-          ${importe !== null ? `<span class="premio-importe">${euros(importe).replace('+', '')}</span>` : ''}
+          ${textoImporte ? `<span class="premio-importe">${textoImporte}</span>` : ''}
         </td>
       `;
     }).join('');
@@ -757,7 +772,7 @@
     }
   }
 
-  function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true, editable = false, plenoDefinitivo = null, editandoDefinitivo = false, premios = null } = {}) {
+  function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true, editable = false, plenoDefinitivo = null, editandoDefinitivo = false, jornadaPremios = null } = {}) {
     const aciertos = Object.fromEntries(usuarios.map((u) => [u, 0]));
     const conResultado = partidos.filter((p) => p.resultado).length;
 
@@ -792,7 +807,7 @@
         <td class="col-resultado">${conResultado}/${partidos.length}</td>
         ${usuarios.map((u) => `<td>${aciertos[u]}/${conResultado}</td>`).join('')}
       </tr>
-      ${premios ? htmlFilaPremio(usuarios, partidos, premios, plenoDefinitivo, conColumnaResultado) : ''}
+      ${jornadaPremios ? htmlFilaPremio(usuarios, partidos, jornadaPremios, conColumnaResultado) : ''}
     `;
 
     return { cabecera, cuerpo, pie };
@@ -992,6 +1007,139 @@
       pintarEconomia();
     }
     if (accion === 'guardar-economia') await guardarEconomia();
+  });
+
+  // ---------- RANKINGS (sobre las jornadas del Historial) ----------
+  let rankingActivo = 'aciertos';
+  let datosRankings = null;
+
+  async function cargarRankings() {
+    try {
+      datosRankings = await api('/api/historial');
+      pintarRanking();
+    } catch (e) {
+      console.error('Error cargando los rankings:', e);
+    }
+  }
+
+  // Ordena de mayor a menor y reparte posiciones (empatados comparten puesto)
+  function conPosiciones(filas, valor) {
+    const ordenadas = [...filas].sort((a, b) => valor(b) - valor(a) || a.username.localeCompare(b.username));
+    return ordenadas.map((f, i) => {
+      const anterior = ordenadas[i - 1];
+      f.posicion = anterior && valor(anterior) === valor(f) ? anterior.posicion : i + 1;
+      return f;
+    });
+  }
+
+  function medalla(posicion) {
+    return { 1: '🥇', 2: '🥈', 3: '🥉' }[posicion] || posicion;
+  }
+
+  function rankingAciertos(usuarios, jornadas) {
+    const filas = usuarios.map((username) => {
+      let aciertos = 0;
+      let comprobados = 0; // partidos con resultado en los que puso pronostico
+      let jugadas = 0;
+      for (const j of jornadas) {
+        let jugo = false;
+        for (const p of j.partidos) {
+          const valor = p.predicciones && p.predicciones[username];
+          if (valor) jugo = true;
+          const acierto = esAcierto(p, valor);
+          if (acierto !== null) comprobados++;
+          if (acierto) aciertos++;
+        }
+        if (jugo) jugadas++;
+      }
+      return { username, aciertos, comprobados, jugadas };
+    });
+    return conPosiciones(filas, (f) => f.aciertos);
+  }
+
+  function rankingDineros(usuarios, jornadas) {
+    const filas = usuarios.map((username) => {
+      let total = 0;
+      let conPremio = 0;
+      let pendientes = 0; // jornadas con categoria pero sin importe conocido
+      for (const j of jornadas) {
+        const jornada = { ...j, id: j.jornada_id };
+        const { importe, categoria } = premioDeUsuario(jornada, j.partidos, username);
+        if (importe === null) {
+          if (categoria) pendientes++;
+          continue;
+        }
+        total += importe;
+        if (importe > 0) conPremio++;
+      }
+      return { username, total, conPremio, pendientes };
+    });
+    return conPosiciones(filas, (f) => f.total);
+  }
+
+  function pintarRanking() {
+    $$('#rankings-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.ranking === rankingActivo));
+    const cont = $('#rankings-contenido');
+    if (!datosRankings) return;
+    const { usuarios, jornadas } = datosRankings;
+
+    if (!jornadas || jornadas.length === 0) {
+      cont.innerHTML = '<div class="empty-state"><p>Todavía no hay jornadas en el Historial.</p></div>';
+      return;
+    }
+    const nJornadas = `${jornadas.length} jornada${jornadas.length === 1 ? '' : 's'} del Historial`;
+
+    if (rankingActivo === 'aciertos') {
+      const filas = rankingAciertos(usuarios, jornadas).map((f) => `
+        <tr>
+          <td class="ranking-posicion">${medalla(f.posicion)}</td>
+          <td>${escapeHtml(f.username)}</td>
+          <td class="ranking-valor">${f.aciertos}</td>
+          <td class="ranking-extra">${f.comprobados ? Math.round((f.aciertos / f.comprobados) * 100) : 0}%</td>
+          <td class="ranking-extra">${f.jugadas}</td>
+        </tr>
+      `).join('');
+      cont.innerHTML = `
+        <p class="resultados-todos-hint">Resultados acertados en las ${nJornadas} (incluido cada Pleno al 15). El % es sobre los partidos con resultado en los que puso pronóstico.</p>
+        <div class="resultados-todos-tabla-scroll ranking-wrap">
+          <table class="resultados-todos-tabla ranking-tabla">
+            <thead><tr><th>#</th><th>Usuario</th><th>Aciertos</th><th>% acierto</th><th>Jornadas</th></tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      `;
+      return;
+    }
+
+    const ranking = rankingDineros(usuarios, jornadas);
+    const totalGanado = ranking.reduce((n, f) => n + f.total, 0);
+    const hayPendientes = ranking.some((f) => f.pendientes);
+    const filas = ranking.map((f) => `
+      <tr>
+        <td class="ranking-posicion">${totalGanado > 0 ? medalla(f.posicion) : '—'}</td>
+        <td>${escapeHtml(f.username)}</td>
+        <td class="ranking-valor ${f.total > 0 ? 'saldo-positivo' : 'saldo-cero'}">${euros(f.total).replace('+', '')}</td>
+        <td class="ranking-extra">${f.conPremio}</td>
+      </tr>
+    `).join('');
+    cont.innerHTML = `
+      ${totalGanado === 0 ? '<div class="ranking-paquetes">Sois unos paquetes</div>' : ''}
+      <p class="resultados-todos-hint">Premios acumulados de cada columna en las ${nJornadas}.${hayPendientes ? ' Hay premios conseguidos cuyo importe aún no se conoce: se sumarán cuando estén.' : ''}</p>
+      <div class="resultados-todos-tabla-scroll ranking-wrap">
+        <table class="resultados-todos-tabla ranking-tabla">
+          <thead><tr><th>#</th><th>Usuario</th><th>Premios</th><th>Jornadas con premio</th></tr></thead>
+          <tbody>${filas}</tbody>
+          <tfoot><tr><td></td><td>Total</td><td class="ranking-valor">${euros(totalGanado).replace('+', '')}</td><td></td></tr></tfoot>
+        </table>
+      </div>
+    `;
+  }
+
+  $('#rankings-tabs').addEventListener('click', (e) => {
+    const boton = e.target.closest('[data-ranking]');
+    if (!boton) return;
+    rankingActivo = boton.dataset.ranking;
+    pintarRanking();
   });
 
   // ---------- UTIL ----------

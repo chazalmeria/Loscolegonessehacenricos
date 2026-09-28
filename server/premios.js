@@ -74,4 +74,10 @@ async function guardarPremiosApi(jornadaId, premios) {
   return cambiados;
 }
 
-module.exports = { CATEGORIAS, normalizarPremiosApi, getPremios, guardarPremiosApi };
+// Premios fijados a mano por usuario: { Burgos: 0, Pepe: 1250, ... } (centimos)
+async function getPremiosUsuario(jornadaId) {
+  const filas = await db.all('SELECT username, premio_centimos FROM premios_usuario WHERE jornada_id = ?', [jornadaId]);
+  return Object.fromEntries(filas.map((f) => [f.username, Number(f.premio_centimos)]));
+}
+
+module.exports = { CATEGORIAS, normalizarPremiosApi, getPremios, guardarPremiosApi, getPremiosUsuario };
