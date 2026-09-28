@@ -21,11 +21,13 @@ function temporadaDe(fecha) {
 }
 
 async function aplicarResultados(jornadaId, resultado) {
-  const partidos = await db.all('SELECT id, orden, es_pleno, resultado FROM partidos WHERE jornada_id = ?', [
-    jornadaId,
-  ]);
+  const partidos = await db.all(
+    'SELECT id, orden, es_pleno, resultado, resultado_manual FROM partidos WHERE jornada_id = ?',
+    [jornadaId]
+  );
   let actualizados = 0;
   for (const p of partidos) {
+    if (p.resultado_manual) continue; // lo puso alguien a mano: no se pisa
     const api = resultado.partidos.find((x) => x.posicion === (p.es_pleno ? 15 : p.orden));
     if (!api) continue;
     const valor = p.es_pleno ? api.marcador : api.signo;

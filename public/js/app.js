@@ -152,6 +152,8 @@
   // Puede haber varias jornadas abiertas a la vez: las creadas a mano (arriba)
   // y la que llega de loteriasapi.com. Cada una se pinta en su propio bloque.
   let usuariosJornada = [];
+  const bloquesJornada = new Map(); // jornada id -> { jornada, partidos, estado } (lo ultimo pintado)
+  const editandoResultados = new Set(); // jornadas con "Poner resultados" abierto
 
   async function cargarJornada() {
     try {
@@ -160,6 +162,7 @@
       const jornadas = data.jornadas || [];
       const manuales = jornadas.filter((j) => j.jornada.manual);
       const deLaApi = jornadas.find((j) => !j.jornada.manual);
+      bloquesJornada.clear();
 
       $('#jornadas-manuales').innerHTML = manuales.map(htmlBloqueJornada).join('');
       $('#jornada-api').innerHTML = deLaApi
@@ -207,10 +210,7 @@
       <li class="${u.completado ? 'completado' : ''}">${escapeHtml(u.username)}: ${u.rellenados}/${u.total}${u.completado ? ' ✓' : ''}</li>
     `).join('');
 
-    const tabla = htmlTablaResultados(usuariosJornada, partidos, { conColumnaResultado: !jornada.manual });
-    const hint = jornada.manual
-      ? 'Lo que ha puesto cada uno. Si alguien no lo ha rellenado, se queda vacío.'
-      : 'Lo que ha puesto cada uno. En verde los aciertos y en rojo los fallos, según se van conociendo los resultados.';
+    bloquesJornada.set(jornada.id, { jornada, partidos, estado });
 
     return `
       <section class="jornada-bloque${jornada.manual ? ' jornada-bloque-manual' : ''}" data-jornada-id="${jornada.id}">
@@ -231,30 +231,102 @@
         <h4>¿Quién ha rellenado ya?</h4>
         <ul class="estado-lista">${estadoHtml}</ul>
 
-        <div class="resultados-todos-wrap">
-          <h4>Resultados de todos</h4>
-          <p class="resultados-todos-hint">${hint}</p>
-          <div class="resultados-todos-tabla-scroll">
-            <table class="resultados-todos-tabla">
-              <thead>${tabla.cabecera}</thead>
-              <tbody>${tabla.cuerpo}</tbody>
-              <tfoot>${tabla.pie}</tfoot>
-            </table>
-          </div>
-        </div>
+        ${htmlResultadosDeTodos(jornada, partidos)}
       </section>
     `;
   }
 
-  // Botones de cada bloque (Guardar / Añadir al historico)
+  // "Resultados de todos" de un bloque. Se repinta por separado al entrar o
+  // salir del modo "Poner resultados", para no perder pronosticos sin guardar.
+  function htmlResultadosDeTodos(jornada, partidos) {
+    const editable = editandoResultados.has(jornada.id);
+    const tabla = htmlTablaResultados(usuariosJornada, partidos, {
+      editable,
+      conColumnaResultado: editable || !jornada.manual || partidos.some((p) => p.resultado),
+    });
+
+    let hint = 'Lo que ha puesto cada uno. En verde los aciertos y en rojo los fallos, según se van conociendo los resultados.';
+    if (editable) {
+      hint = 'Pon el signo de cada partido ya jugado (y los goles del Pleno al 15). Deja en blanco lo que no sepas. La API no cambia lo que pongáis a mano; si lo borras, lo volverá a rellenar ella.';
+    } else if (partidos.some((p) => p.resultado_manual)) {
+      hint += ' Los marcados con * los ha puesto alguien a mano.';
+    }
+
+    const acciones = editable
+      ? `
+        <button type="button" class="btn btn-ghost btn-small" data-accion="cancelar-resultados">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-small" data-accion="guardar-resultados">Guardar resultados</button>
+      `
+      : '<button type="button" class="btn btn-ghost btn-small" data-accion="poner-resultados">Poner resultados</button>';
+
+    return `
+      <div class="resultados-todos-wrap">
+        <div class="tab-header-row">
+          <h4>Resultados de todos</h4>
+          <div class="resultados-acciones">${acciones}</div>
+        </div>
+        <p class="resultados-todos-hint">${hint}</p>
+        <div class="resultados-todos-tabla-scroll">
+          <table class="resultados-todos-tabla">
+            <thead>${tabla.cabecera}</thead>
+            <tbody>${tabla.cuerpo}</tbody>
+            <tfoot>${tabla.pie}</tfoot>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function repintarResultados(bloque, jornadaId) {
+    const datos = bloquesJornada.get(jornadaId);
+    if (!datos) return;
+    bloque.querySelector('.resultados-todos-wrap').outerHTML = htmlResultadosDeTodos(datos.jornada, datos.partidos);
+  }
+
+  // Botones de cada bloque (Guardar / Añadir al historico / Poner resultados)
   $('#tab-jornada').addEventListener('click', async (e) => {
     const boton = e.target.closest('[data-accion]');
     if (!boton) return;
     const bloque = boton.closest('.jornada-bloque');
     const jornadaId = Number(bloque.dataset.jornadaId);
-    if (boton.dataset.accion === 'guardar') await guardarPronosticos(bloque, jornadaId);
-    if (boton.dataset.accion === 'archivar') await archivarJornada(bloque, jornadaId);
+    const accion = boton.dataset.accion;
+    if (accion === 'guardar') await guardarPronosticos(bloque, jornadaId);
+    if (accion === 'archivar') await archivarJornada(bloque, jornadaId);
+    if (accion === 'poner-resultados' || accion === 'cancelar-resultados') {
+      if (accion === 'poner-resultados') editandoResultados.add(jornadaId);
+      else editandoResultados.delete(jornadaId);
+      repintarResultados(bloque, jornadaId);
+    }
+    if (accion === 'guardar-resultados') await guardarResultados(bloque, jornadaId);
   });
+
+  async function guardarResultados(bloque, jornadaId) {
+    const resultados = {};
+    bloque.querySelectorAll('[data-res-partido]').forEach((sel) => {
+      resultados[sel.dataset.resPartido] = sel.value;
+    });
+    const pleno = bloque.querySelector('[data-res-pleno]');
+    if (pleno) {
+      const gl = pleno.querySelector('[data-res-goles="local"]').value.trim();
+      const gv = pleno.querySelector('[data-res-goles="visitante"]').value.trim();
+      if ((gl === '') !== (gv === '')) {
+        alert('En el Pleno al 15 pon los goles de los dos equipos (o deja los dos en blanco).');
+        return;
+      }
+      resultados[pleno.dataset.resPleno] = gl === '' ? '' : `${Number(gl)}-${Number(gv)}`;
+    }
+
+    try {
+      await api(`/api/jornada/${jornadaId}/resultados`, {
+        method: 'POST',
+        body: JSON.stringify({ resultados }),
+      });
+      editandoResultados.delete(jornadaId);
+      await cargarJornada();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
 
   async function guardarPronosticos(bloque, jornadaId) {
     const predicciones = {};
@@ -387,9 +459,38 @@
     return String(pronostico).toUpperCase() === String(partido.resultado).toUpperCase();
   }
 
+  // Celda "Resultado": el valor (marcado si se puso a mano) o, en modo edicion,
+  // un selector 1/X/2 (o los goles del Pleno al 15).
+  function htmlCeldaResultado(p, editable) {
+    if (editable) {
+      if (p.es_pleno) {
+        const [gl, gv] = (p.resultado || '').split('-');
+        return `
+          <td class="col-resultado editando" data-res-pleno="${p.id}">
+            <input type="number" min="0" max="99" data-res-goles="local" value="${escapeHtml(gl || '')}" aria-label="Goles local" />
+            -
+            <input type="number" min="0" max="99" data-res-goles="visitante" value="${escapeHtml(gv || '')}" aria-label="Goles visitante" />
+          </td>
+        `;
+      }
+      return `
+        <td class="col-resultado editando">
+          <select data-res-partido="${p.id}" aria-label="Resultado">
+            ${['', '1', 'X', '2'].map((v) => `<option value="${v}" ${(p.resultado || '') === v ? 'selected' : ''}>${v || '—'}</option>`).join('')}
+          </select>
+        </td>
+      `;
+    }
+    if (!p.resultado) return `<td class="col-resultado valor-vacio" title="Aún sin resultado">·</td>`;
+    return p.resultado_manual
+      ? `<td class="col-resultado resultado-manual" title="Puesto a mano">${escapeHtml(p.resultado)}*</td>`
+      : `<td class="col-resultado">${escapeHtml(p.resultado)}</td>`;
+  }
+
   // Tabla "Resultados de todos" (partido x usuario) usada en Jornada y en Historial.
-  // Las jornadas creadas a mano no reciben resultados de la API: sin columna Resultado.
-  function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true } = {}) {
+  // Si la jornada no tiene ningun resultado (tipico de las creadas a mano) y no
+  // se esta editando, se puede ocultar la columna Resultado.
+  function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true, editable = false } = {}) {
     const aciertos = Object.fromEntries(usuarios.map((u) => [u, 0]));
     const conResultado = partidos.filter((p) => p.resultado).length;
 
@@ -403,9 +504,7 @@
 
     const cuerpo = partidos.map((p) => {
       const etiqueta = (p.es_pleno ? 'Pleno al 15: ' : '') + `${escapeHtml(p.equipo_local)} - ${escapeHtml(p.equipo_visitante)}`;
-      const resultado = !conColumnaResultado ? "" : p.resultado
-        ? `<td class="col-resultado">${escapeHtml(p.resultado)}</td>`
-        : `<td class="col-resultado valor-vacio" title="Aún sin resultado">·</td>`;
+      const resultado = conColumnaResultado ? htmlCeldaResultado(p, editable) : '';
       const celdas = usuarios.map((u) => {
         const valor = (p.predicciones && p.predicciones[u]) || '';
         if (!valor) return `<td class="valor-vacio">—</td>`;
@@ -466,7 +565,9 @@
       return;
     }
 
-    const { cabecera, cuerpo, pie } = htmlTablaResultados(usuarios, jornada.partidos, { conColumnaResultado: !jornada.manual });
+    const { cabecera, cuerpo, pie } = htmlTablaResultados(usuarios, jornada.partidos, {
+      conColumnaResultado: !jornada.manual || jornada.partidos.some((p) => p.resultado),
+    });
 
     cont.innerHTML = `
       <h3>${tituloJornada(jornada)}</h3>

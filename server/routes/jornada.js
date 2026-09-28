@@ -129,6 +129,47 @@ router.post('/:id/archivar', requireAuth, async (req, res, next) => {
   }
 });
 
+// Poner (o corregir) a mano el resultado real de los partidos de una jornada
+// abierta, por si la API va con retraso. Body: { resultados: { partidoId: valor } }
+// con valor "1"/"X"/"2" (o "2-1" en el Pleno al 15). Un valor vacio borra el
+// resultado y deja que lo vuelva a rellenar la API.
+router.post('/:id/resultados', requireAuth, async (req, res, next) => {
+  try {
+    const { resultados } = req.body || {};
+    if (!resultados || typeof resultados !== 'object') {
+      return res.status(400).json({ error: 'Formato invalido' });
+    }
+
+    const jornada = await db.get('SELECT id FROM jornadas WHERE id = ? AND activa = 1', [Number(req.params.id)]);
+    if (!jornada) return res.status(400).json({ error: 'Esa jornada ya no está abierta' });
+
+    const partidos = new Map((await getPartidos(jornada.id)).map((p) => [p.id, p]));
+    const cambios = [];
+    for (const [partidoId, bruto] of Object.entries(resultados)) {
+      const p = partidos.get(Number(partidoId));
+      if (!p) continue;
+      const valor = String(bruto || '').trim().toUpperCase();
+      const valido = valor === '' || (p.es_pleno ? /^\d{1,2}-\d{1,2}$/.test(valor) : ['1', 'X', '2'].includes(valor));
+      if (!valido) {
+        return res.status(400).json({ error: `Resultado no válido en ${p.equipo_local} - ${p.equipo_visitante}` });
+      }
+      // Solo lo que cambia: reenviar un resultado que ya vino de la API no lo convierte en "a mano"
+      if (valor === (p.resultado || '')) continue;
+      cambios.push([valor || null, valor ? 1 : 0, p.id]);
+    }
+
+    await db.tx(async (t) => {
+      for (const args of cambios) {
+        await t.run('UPDATE partidos SET resultado = ?, resultado_manual = ? WHERE id = ?', args);
+      }
+    });
+
+    res.json({ ok: true, cambiados: cambios.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Guardar mis pronosticos de una jornada abierta
 router.post('/predicciones', requireAuth, async (req, res, next) => {
   try {

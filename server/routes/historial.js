@@ -42,6 +42,7 @@ router.get('/', requireAuth, async (req, res, next) => {
           equipo_visitante: p.equipo_visitante,
           es_pleno: !!p.es_pleno,
           resultado: p.resultado || null,
+          resultado_manual: !!p.resultado_manual,
           predicciones: mapaPorPartido[p.id] || {},
         })),
       });

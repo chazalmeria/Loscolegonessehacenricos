@@ -370,6 +370,21 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
 }
+.resultados-todos-tabla td.resultado-manual { color: var(--text-dim); }
+.resultados-todos-tabla td.editando { padding: .3rem .4rem; }
+.resultados-todos-tabla td.editando select,
+.resultados-todos-tabla td.editando input {
+  font: inherit;
+  padding: .2rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+}
+.resultados-todos-tabla td.editando select { width: 3.4rem; }
+.resultados-todos-tabla td.editando input { width: 2.6rem; text-align: center; }
+.resultados-acciones { display: flex; gap: .5rem; flex-wrap: wrap; }
+.resultados-todos-wrap .tab-header-row h4 { margin: .8rem 0 .3rem; }
 .resultados-todos-tabla td.acierto { background: var(--ok-bg); color: var(--primary-text); font-weight: 700; }
 .resultados-todos-tabla td.fallo { background: var(--fail-bg); color: var(--danger); font-weight: 700; }
 .resultados-todos-tabla tfoot td {

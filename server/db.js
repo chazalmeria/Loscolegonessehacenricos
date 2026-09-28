@@ -61,6 +61,9 @@ const MIGRACIONES = [
   // pasa al Historial con el boton "Añadir al historico"). En ese caso "numero"
   // guarda el titulo que le puso quien la creo.
   'ALTER TABLE jornadas ADD COLUMN manual INTEGER NOT NULL DEFAULT 0',
+  // 1 = el resultado lo puso alguien a mano (boton "Poner resultados"); la
+  // sincronizacion con la API ya no lo toca.
+  'ALTER TABLE partidos ADD COLUMN resultado_manual INTEGER NOT NULL DEFAULT 0',
   // Evita crear dos veces la misma jornada si dos peticiones sincronizan a la vez
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_jornadas_draw_id ON jornadas(draw_id)',
 ];
