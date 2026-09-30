@@ -36,13 +36,14 @@ async function aplicarResultados(jornadaId, resultado) {
   return actualizados;
 }
 
-async function crearJornada(resultado) {
+// enJuego = true: se crea ya "en juego" (jornada pasada) sin tocar las demas
+async function crearJornada(resultado, { enJuego = false } = {}) {
   return db.tx(async (t) => {
     // La que estaba abierta pasa a "en juego": sigue en Jornada, sin pronosticos
-    await t.run('UPDATE jornadas SET en_juego = 1 WHERE activa = 1 AND manual = 0');
+    if (!enJuego) await t.run('UPDATE jornadas SET en_juego = 1 WHERE activa = 1 AND manual = 0');
     const info = await t.run(
-      'INSERT INTO jornadas (numero, temporada, activa, draw_id, draw_date) VALUES (?, ?, 1, ?, ?)',
-      [resultado.numero, resultado.temporada, resultado.drawId, resultado.drawDate]
+      'INSERT INTO jornadas (numero, temporada, activa, en_juego, draw_id, draw_date) VALUES (?, ?, 1, ?, ?, ?)',
+      [resultado.numero, resultado.temporada, enJuego ? 1 : 0, resultado.drawId, resultado.drawDate]
     );
     const id = info.lastInsertRowid;
     for (const p of resultado.partidos) {
@@ -103,6 +104,50 @@ async function sincronizar() {
   return resumen;
 }
 
+// Mete una jornada pasada que no llego a crearse (p. ej. porque la API fallaba),
+// con los pronosticos de cada uno apuntados fuera de la app.
+// temporada = la de Losilla (2027 = 2026/27). pronosticos = { usuario: [14 signos..., pleno] }.
+// Si ya hay una jornada de la API mas nueva, entra "en juego" (encima de ella)
+// y pasa sola al Historial cuando tenga resultados y premios.
+async function importarJornada(temporada, numero, pronosticos) {
+  const r = await losilla.jornada(temporada, numero);
+  if (!r) throw new Error(`Losilla no tiene la jornada ${numero} de ${temporada}`);
+
+  let jornada = await buscarJornada(r);
+  if (!jornada) {
+    const masNueva = await db.get(
+      'SELECT id FROM jornadas WHERE activa = 1 AND manual = 0 AND draw_date > ? LIMIT 1',
+      [r.drawDate]
+    );
+    jornada = { id: await crearJornada(r, { enJuego: !!masNueva }) };
+  }
+
+  const partidos = await db.all('SELECT id, orden, es_pleno FROM partidos WHERE jornada_id = ? ORDER BY es_pleno, orden', [
+    jornada.id,
+  ]);
+  let guardados = 0;
+  await db.tx(async (t) => {
+    for (const [usuario, valores] of Object.entries(pronosticos || {})) {
+      for (let i = 0; i < partidos.length && i < valores.length; i++) {
+        const valor = String(valores[i] || '').trim().toUpperCase();
+        if (!valor) continue;
+        await t.run(
+          `INSERT INTO predicciones (partido_id, username, pronostico, updated_at)
+           VALUES (?, ?, ?, datetime('now'))
+           ON CONFLICT(partido_id, username)
+           DO UPDATE SET pronostico = excluded.pronostico, updated_at = datetime('now')`,
+          [partidos[i].id, usuario, valor]
+        );
+        guardados++;
+      }
+    }
+  });
+
+  const resultados = await aplicarResultados(jornada.id, r);
+  if (r.premios.length) await premios.guardarPremiosApi(jornada.id, r.premios);
+  return { jornadaId: jornada.id, pronosticosGuardados: guardados, resultadosActualizados: resultados };
+}
+
 // Una jornada en juego pasa al Historial cuando tiene el resultado de todos
 // sus partidos y los premios, o cuando ya no esta entre las que revisa la
 // sincronizacion (no le van a llegar mas datos).
@@ -145,4 +190,4 @@ async function sincronizarSiToca() {
   }
 }
 
-module.exports = { sincronizar, sincronizarSiToca };
+module.exports = { sincronizar, sincronizarSiToca, importarJornada };

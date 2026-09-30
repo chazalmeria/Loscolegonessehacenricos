@@ -96,4 +96,4 @@ async function ultimasJornadas(cuantas = 3) {
   return (await Promise.all(pedidas)).filter(Boolean);
 }
 
-module.exports = { ultimasJornadas };
+module.exports = { ultimasJornadas, jornada };
