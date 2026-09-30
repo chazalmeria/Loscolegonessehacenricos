@@ -1,25 +1,19 @@
-// Sincroniza la app con loteriasapi.com:
-//   1. Si la API ya publica una jornada nueva (sus 15 partidos), la crea como
+// Sincroniza la app con la API publica de Eduardo Losilla (ver server/losilla.js):
+//   1. Si hay una jornada abierta nueva (sus 15 partidos), la crea como
 //      jornada activa. La anterior de la API pasa sola al Historial. Las
 //      jornadas creadas a mano (manual = 1) no se tocan nunca.
 //   2. Rellena el resultado real de cada partido (signo 1/X/2 y, en el Pleno
-//      al 15, los goles) en todas las jornadas enlazadas con la API.
+//      al 15, los goles) y los premios en las ultimas jornadas enlazadas.
 //
 // Se lanza desde el cron diario de Vercel (/api/admin/sync) y, ademas, cuando
 // alguien abre Jornada o Historial, como mucho una vez cada INTERVALO_MIN
-// minutos, para no gastar el cupo del plan gratuito (1.000 peticiones/mes).
+// minutos. No depende de ningun servicio externo con clave ni cupo.
 
 const db = require('./db');
-const loterias = require('./loterias');
+const losilla = require('./losilla');
 const premios = require('./premios');
 
-const INTERVALO_MIN = 60;
-
-function temporadaDe(fecha) {
-  const [y, m] = fecha.split('-').map(Number);
-  const inicio = m >= 7 ? y : y - 1;
-  return `${inicio}/${String((inicio + 1) % 100).padStart(2, '0')}`;
-}
+const INTERVALO_MIN = 30;
 
 async function aplicarResultados(jornadaId, resultado) {
   const partidos = await db.all(
@@ -41,18 +35,11 @@ async function aplicarResultados(jornadaId, resultado) {
 }
 
 async function crearJornada(resultado) {
-  let numero = null;
-  try {
-    numero = await loterias.numeroJornada(resultado.drawId);
-  } catch (err) {
-    console.error('[sync] No se pudo leer el numero de jornada:', err.message);
-  }
-
   return db.tx(async (t) => {
     await t.run('UPDATE jornadas SET activa = 0 WHERE activa = 1 AND manual = 0');
     const info = await t.run(
       'INSERT INTO jornadas (numero, temporada, activa, draw_id, draw_date) VALUES (?, ?, 1, ?, ?)',
-      [String(numero || resultado.drawDate), temporadaDe(resultado.drawDate), resultado.drawId, resultado.drawDate]
+      [resultado.numero, resultado.temporada, resultado.drawId, resultado.drawDate]
     );
     const id = info.lastInsertRowid;
     for (const p of resultado.partidos) {
@@ -66,29 +53,41 @@ async function crearJornada(resultado) {
   });
 }
 
+// Busca la jornada de la API en la base de datos. Las que se crearon con
+// loteriasapi.com tienen otro draw_id: se reconocen por temporada + numero y
+// se re-enlazan con el id de Losilla para seguir recibiendo resultados.
+async function buscarJornada(r) {
+  const enlazada = await db.get('SELECT id FROM jornadas WHERE draw_id = ?', [r.drawId]);
+  if (enlazada) return enlazada;
+  const antigua = await db.get(
+    `SELECT id FROM jornadas WHERE manual = 0 AND temporada = ? AND numero = ?
+       AND (draw_id IS NULL OR draw_id NOT LIKE 'losilla-%') ORDER BY id DESC LIMIT 1`,
+    [r.temporada, r.numero]
+  );
+  if (antigua) await db.run('UPDATE jornadas SET draw_id = ? WHERE id = ?', [r.drawId, antigua.id]);
+  return antigua || null;
+}
+
 async function sincronizar() {
   const resumen = { jornadaNueva: null, resultadosActualizados: 0, premiosActualizados: 0 };
-  const resultados = await loterias.ultimosResultados(3);
+  const resultados = await losilla.ultimasJornadas(3);
   if (resultados.length === 0) return resumen;
 
-  // 1. Jornada nueva (el sorteo mas reciente de la API que aun no tenemos)
+  // 1. Jornada nueva (la abierta en Losilla, si aun no la tenemos)
   const reciente = resultados[0];
-  const yaEsta = await db.get('SELECT id FROM jornadas WHERE draw_id = ?', [reciente.drawId]);
-  if (!yaEsta) {
-    // No pisamos una jornada de la API mas nueva que este sorteo
+  if (!(await buscarJornada(reciente))) {
+    // No pisamos una jornada de la API mas nueva que esta
     const activa = await db.get(
       'SELECT draw_date FROM jornadas WHERE activa = 1 AND manual = 0 ORDER BY id DESC LIMIT 1'
     );
-    if (!activa || !activa.draw_date || activa.draw_date < reciente.drawDate) {
+    if (!activa || !activa.draw_date || !reciente.drawDate || activa.draw_date < reciente.drawDate) {
       resumen.jornadaNueva = await crearJornada(reciente);
     }
   }
 
-  // 2. Resultados y premios de todas las jornadas enlazadas que siguen en la API.
-  // Ojo: el plan gratuito solo da los ultimos 7 dias, asi que los premios hay
-  // que guardarlos en cuanto aparecen.
+  // 2. Resultados y premios de las jornadas enlazadas
   for (const r of resultados) {
-    const jornada = await db.get('SELECT id FROM jornadas WHERE draw_id = ?', [r.drawId]);
+    const jornada = await buscarJornada(r);
     if (!jornada) continue;
     resumen.resultadosActualizados += await aplicarResultados(jornada.id, r);
     if (r.premios.length) resumen.premiosActualizados += await premios.guardarPremiosApi(jornada.id, r.premios);
@@ -109,7 +108,6 @@ function marcarSync() {
 // Version "de paso" para las pantallas: respeta el intervalo minimo y nunca
 // lanza errores (si la API falla, la pagina se sirve igual con lo que haya).
 async function sincronizarSiToca() {
-  if (!process.env.LOTERIAS_API_KEY) return;
   try {
     const fila = await db.get("SELECT valor FROM meta WHERE clave = 'ultima_sync'");
     if (fila && Date.now() - Date.parse(fila.valor) < INTERVALO_MIN * 60 * 1000) return;
@@ -118,7 +116,7 @@ async function sincronizarSiToca() {
     await marcarSync();
     await sincronizar();
   } catch (err) {
-    console.error('[sync] Fallo al sincronizar con loteriasapi.com:', err.message);
+    console.error('[sync] Fallo al sincronizar con eduardolosilla.es:', err.message);
   }
 }
 

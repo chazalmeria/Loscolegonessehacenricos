@@ -154,7 +154,7 @@
 
   // ---------- JORNADA ----------
   // Puede haber varias jornadas abiertas a la vez: las creadas a mano (arriba)
-  // y la que llega de loteriasapi.com. Cada una se pinta en su propio bloque.
+  // y la que llega de la API (Eduardo Losilla). Cada una se pinta en su propio bloque.
   let usuariosJornada = [];
   const bloquesJornada = new Map(); // jornada id -> { jornada, partidos, estado } (lo ultimo pintado)
   const editandoResultados = new Set(); // jornadas con "Poner resultados" abierto
@@ -173,7 +173,7 @@
       $('#jornadas-manuales').innerHTML = manuales.map(htmlBloqueJornada).join('');
       $('#jornada-api').innerHTML = deLaApi
         ? htmlBloqueJornada(deLaApi)
-        : `<div class="empty-state"><p>Todavía no hay jornada de la API. En cuanto loteriasapi.com publique los partidos aparecerá aquí sola. Si no funciona, usa "Crear jornada manualmente".</p></div>`;
+        : `<div class="empty-state"><p>Todavía no hay jornada de la API. En cuanto se abra la próxima jornada aparecerá aquí sola. Si no funciona, usa "Crear jornada manualmente".</p></div>`;
     } catch (e) {
       console.error('Error cargando la jornada:', e);
     }
@@ -715,9 +715,9 @@
       `
       : '<button type="button" class="btn btn-ghost btn-small" data-accion="editar-premios">Poner premios</button>';
 
-    let hint = 'Premio por acertante de cada categoría. Llegan solos de loteriasapi.com cuando se publica el escrutinio (normalmente lunes o martes).';
+    let hint = 'Premio por acertante de cada categoría. Llegan solos cuando se publica el escrutinio (normalmente lunes o martes).';
     if (editando) hint = 'Pon el premio por acertante (en euros) y, si quieres, el número de acertantes. Deja en blanco una categoría para borrarla. La API no cambia lo que pongáis a mano.';
-    else if (!hayPremios) hint = 'Todavía no hay premios. Llegarán solos de loteriasapi.com cuando se publique el escrutinio, o podéis ponerlos a mano.';
+    else if (!hayPremios) hint = 'Todavía no hay premios. Llegarán solos cuando se publique el escrutinio, o podéis ponerlos a mano.';
     else if (hayManual) hint += ' Los marcados con * los ha puesto alguien a mano.';
 
     return `

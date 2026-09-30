@@ -9,7 +9,7 @@ App privada para el grupo: portada con acceso restringido, login compartido, cha
 - **Portada**: "Si no eres colegón o eres usero, no eres bienvenido" + botón de Login.
 - **Login**: 7 usuarios fijos (Burgos, Paquero, Jordan, Pepe, Largo, Joaquin, Miguel), todos con la contraseña `MaximianoGuapo`.
 - **Inicio**: chat entre todos los usuarios logueados (se actualiza solo cada 4 segundos).
-- **Jornada**: la jornada de La Quiniela llega sola desde loteriasapi.com (15 partidos + Pleno al 15) y cada usuario rellena su propia columna de pronósticos (1 / X / 2). Se ve quién ha completado ya su quiniela. Si la API falla, el botón "Crear jornada manualmente" crea otra jornada que aparece encima de la de la API, con su título y la etiqueta "(a mano)", y que se pasa al Historial con "Añadir al histórico".
+- **Jornada**: la jornada de La Quiniela llega sola desde la API pública de Eduardo Losilla (15 partidos + Pleno al 15) y cada usuario rellena su propia columna de pronósticos (1 / X / 2). Se ve quién ha completado ya su quiniela. Si la API falla, el botón "Crear jornada manualmente" crea otra jornada que aparece encima de la de la API, con su título y la etiqueta "(a mano)", y que se pasa al Historial con "Añadir al histórico".
 - **Rankings**: dos pestañas sobre las jornadas del Historial. "Aciertos": resultados acertados en total (incluido cada Pleno al 15) y % de acierto. "Dineros": premios acumulados por columna; mientras nadie haya ganado nada sale "Sois unos paquetes".
 - **Economía**: lo que lleva cada uno (+/-) en el bote común y el total. Se cambia a mano con "Modificar saldos" (cualquier usuario); se guarda quién y cuándo lo cambió por última vez.
 - **Historial**: una pestaña por usuario con todas sus jornadas pasadas y lo que pronosticó en cada una.
@@ -91,23 +91,22 @@ Con cualquiera de las dos opciones, te quedas con dos valores: la URL (`TURSO_DA
    | `SHARED_PASSWORD` | `MaximianoGuapo` (o la que prefieras) |
    | `COOKIE_SECRET` | cualquier cadena larga y aleatoria (invéntatela) |
    | `ADMIN_UPDATE_TOKEN` | otra cadena larga y aleatoria (para la actualización automática de la jornada) |
-   | `LOTERIAS_API_KEY` | tu API key de https://loteriasapi.com (plan gratuito) |
    | `CRON_SECRET` | otra cadena larga y aleatoria (Vercel la usa para llamar al cron diario) |
 
 4. Pulsa "Deploy". En un minuto tendrás una URL tipo `https://quiniela-colegas.vercel.app` — compártela con Burgos, Paquero, Jordan, Pepe, Largo, Joaquin y Miguel.
 5. Cada vez que hagas `git push` a `main`, Vercel vuelve a desplegar solo.
 
-## Jornadas y resultados automáticos (loteriasapi.com)
+## Jornadas y resultados automáticos (Eduardo Losilla)
 
-La app lee La Quiniela de [loteriasapi.com](https://loteriasapi.com) (datos oficiales de SELAE):
+La app lee La Quiniela de la API pública de [Eduardo Losilla](https://www.eduardolosilla.es) (`api.eduardolosilla.es`, la misma que usa su web). No necesita clave ni tiene cupo de peticiones. Hasta septiembre de 2026 se usaba loteriasapi.com, pero su plan gratuito se agotaba y la web dejaba de actualizarse.
 
-- **Jornada nueva**: en cuanto la API publica los 15 partidos de un sorteo nuevo, se crea sola como jornada activa y la anterior de la API pasa al Historial. Las jornadas creadas a mano no se tocan nunca.
+- **Jornada nueva**: en cuanto se abre la jornada siguiente (antes de jugarse, para poder rellenar los pronósticos), se crea sola como jornada activa y la anterior de la API pasa al Historial. Las jornadas creadas a mano no se tocan nunca.
 - **Resultados**: se guarda el signo real de cada partido (1/X/2) y el marcador del Pleno al 15. En la tabla "Resultados de todos" (Jornada e Historial) cada casilla sale en verde si es acierto y en rojo si es fallo, con el recuento de aciertos de cada uno abajo. El Pleno se compara como en la quiniela oficial: 0, 1, 2 o M (3 o más goles) por equipo.
-- **Cuándo se consulta**: un cron de Vercel llama a `/api/admin/sync` una vez al día (ver `vercel.json`), y además la app sincroniza al abrir Jornada o Historial, como mucho una vez por hora, para no pasar de las 1.000 peticiones/mes del plan gratuito.
+- **Cuándo se consulta**: un cron de Vercel llama a `/api/admin/sync` una vez al día (ver `vercel.json`), y además la app sincroniza al abrir Jornada o Historial, como mucho una vez cada 30 minutos. Revisa las 3 últimas jornadas.
 - Para forzar una sincronización a mano: `curl -H "x-admin-token: TU_ADMIN_UPDATE_TOKEN" https://tu-app.vercel.app/api/admin/sync`.
 - **Resultados a mano**: si la API va con retraso, en cada jornada (abierta o ya en el Historial) el botón "Poner resultados" (en "Resultados de todos") permite poner el signo de cada partido y los goles del Pleno (un número o M) mirando la web oficial. Salen con un * y la API ya no los cambia; si se borran, la API los vuelve a rellenar cuando los tenga.
 - **Pleno al 15 definitivo**: debajo del Pleno al 15 de cada uno hay una fila con el Pleno común que juega el grupo. Es una sola casilla, se pone o cambia a mano con su botón "Poner"/"Cambiar" (o dentro de "Poner resultados"), se colorea según el resultado real del Pleno y no suma en los aciertos individuales.
-- **Premios**: cuando SELAE publica el escrutinio, la sincronización guarda los premios de cada categoría (Pleno al 15, 14, 13, 12, 11 y 10 aciertos) en "Premios de la jornada". Ojo: el plan gratuito de loteriasapi.com solo da los últimos 7 días, así que las jornadas antiguas (p. ej. las importadas del Excel) hay que rellenarlas a mano con "Poner premios"; la API no pisa lo puesto a mano. En "Resultados de todos", la fila "Premio" muestra la categoría y el premio de cada columna y el total del bote. Como en un boleto real, el Pleno al 15 es común: la categoría Pleno al 15 (14 + Pleno) se decide con el Pleno definitivo.
+- **Premios**: cuando SELAE publica el escrutinio, la sincronización guarda los premios de cada categoría (Pleno al 15, 14, 13, 12, 11 y 10 aciertos) en "Premios de la jornada". Solo se revisan las 3 últimas jornadas, así que las más antiguas (p. ej. las importadas del Excel) hay que rellenarlas a mano con "Poner premios"; la API no pisa lo puesto a mano. En "Resultados de todos", la fila "Premio" muestra la categoría y el premio de cada columna y el total del bote. Como en un boleto real, el Pleno al 15 es común: la categoría Pleno al 15 (14 + Pleno) se decide con el Pleno definitivo.
 - Si la API no funciona o aún no tiene la jornada: "Jornada" → "Crear jornada manualmente". Esas jornadas no reciben resultados de la API y pasan al Historial solo cuando alguien pulsa "Añadir al histórico".
 
 ## Estructura del proyecto
@@ -124,7 +123,7 @@ quiniela-colegas/
 │   ├── index.js           # arranque local ("npm start"); no se usa en Vercel
 │   ├── db.js              # acceso a datos (Turso / SQLite via @libsql/client)
 │   ├── auth.js             # usuarios fijos + contraseña compartida + cookie firmada
-│   ├── loterias.js         # cliente de loteriasapi.com (La Quiniela)
+│   ├── losilla.js          # cliente de la API pública de Eduardo Losilla (La Quiniela)
 │   ├── sync.js             # crea jornadas nuevas y rellena resultados y premios desde la API
 │   ├── premios.js          # premios por categoria (API o a mano)
 │   └── routes/

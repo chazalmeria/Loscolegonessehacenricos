@@ -1,4 +1,4 @@
-// Endpoints de administracion: sincronizacion con loteriasapi.com.
+// Endpoints de administracion: sincronizacion con la API de Eduardo Losilla.
 // Protegidos por un token secreto (ADMIN_UPDATE_TOKEN o el CRON_SECRET de
 // Vercel), NO por la cookie de sesion.
 const express = require('express');
@@ -23,7 +23,7 @@ function checkCronOrToken(req, res, next) {
   return checkToken(req, res, next);
 }
 
-// Busca jornada nueva y resultados en loteriasapi.com (ver server/sync.js)
+// Busca jornada nueva y resultados en la API de Eduardo Losilla (ver server/sync.js)
 router.all('/sync', checkCronOrToken, async (req, res, next) => {
   try {
     res.json({ ok: true, ...(await sync.sincronizar()) });

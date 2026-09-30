@@ -53,7 +53,7 @@ const SCHEMA = [
     updated_by TEXT
   )`,
   // Premios de cada jornada por categoria: aciertos = 15 (Pleno al 15: 14 + Pleno),
-  // 14, 13, 12, 11 o 10. Vienen de loteriasapi.com o se ponen a mano (manual = 1,
+  // 14, 13, 12, 11 o 10. Vienen de la API (Eduardo Losilla) o se ponen a mano (manual = 1,
   // y entonces la API no los pisa).
   `CREATE TABLE IF NOT EXISTS premios (
     jornada_id INTEGER NOT NULL REFERENCES jornadas(id) ON DELETE CASCADE,
@@ -81,7 +81,7 @@ const SCHEMA = [
 // "ADD COLUMN IF NOT EXISTS", asi que se intentan una a una y se ignora el
 // error de "duplicate column" cuando ya existen.
 const MIGRACIONES = [
-  'ALTER TABLE jornadas ADD COLUMN draw_id TEXT',   // id del sorteo en loteriasapi.com
+  'ALTER TABLE jornadas ADD COLUMN draw_id TEXT',   // id de la jornada en la API ("losilla-2027-11"; las antiguas, de loteriasapi.com)
   'ALTER TABLE jornadas ADD COLUMN draw_date TEXT', // fecha del sorteo (YYYY-MM-DD)
   'ALTER TABLE partidos ADD COLUMN resultado TEXT', // signo real (1/X/2) o, en el pleno, goles "2-1"
   // 1 = creada a mano desde la pestaña Jornada (convive con la de la API y se
