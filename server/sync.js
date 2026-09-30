@@ -73,8 +73,10 @@ async function buscarJornada(r) {
        AND (draw_id IS NULL OR draw_id NOT LIKE 'losilla-%') ORDER BY id DESC LIMIT 1`,
     [r.temporada, r.numero]
   );
-  if (antigua) await db.run('UPDATE jornadas SET draw_id = ? WHERE id = ?', [r.drawId, antigua.id]);
-  return antigua || null;
+  // Solo si son los mismos partidos: el numero de las antiguas puede no cuadrar
+  if (!antigua || !(await coincideJornada(antigua.id, r))) return null;
+  await db.run('UPDATE jornadas SET draw_id = ? WHERE id = ?', [r.drawId, antigua.id]);
+  return antigua;
 }
 
 async function sincronizar() {
@@ -161,7 +163,63 @@ async function importarJornada(temporada, numero, pronosticos) {
 // POR_VUELTA jornadas en cada sincronizacion; las que Losilla no tenga se
 // apuntan en meta para no volver a pedirlas.
 const POR_VUELTA = 4;
+
+// Clave corta de un equipo para comparar nombres de distintas fuentes:
+// "Athletic Club" / "ATH.CLUB", "Real Madrid" / "R.MADRID", "Real Valladolid" / "VALLADOLID"
+function claveEquipo(nombre) {
+  return String(nombre || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Z0-9]/g, '')
+    .replace(/^ATLETICODE/, 'AT')
+    .replace(/^ATHLETIC/, 'ATH')
+    .replace(/^REAL/, 'R');
+}
+function mismoEquipo(a, b) {
+  const x = claveEquipo(a);
+  const y = claveEquipo(b);
+  if (!x || !y) return false;
+  return x.slice(0, 4) === y.slice(0, 4) || x.includes(y.slice(-5)) || y.includes(x.slice(-5));
+}
+
+// ¿Es la misma jornada? Al menos 10 de los 14 partidos con el mismo local.
+// (El numero no basta: las jornadas del Excel se numeraron seguidas y saltan
+// las que el grupo no jugo, p. ej. la de Champions.)
+async function coincideJornada(jornadaId, r) {
+  const partidos = await db.all('SELECT orden, equipo_local FROM partidos WHERE jornada_id = ? AND es_pleno = 0', [jornadaId]);
+  const iguales = partidos.filter((p) => {
+    const api = r.partidos.find((x) => x.posicion === Number(p.orden));
+    return api && mismoEquipo(p.equipo_local, api.local);
+  }).length;
+  return iguales >= Math.min(10, partidos.length);
+}
+
+// Busca en Losilla la jornada que corresponde a una de la base de datos:
+// primero la de su numero y luego las cercanas (±3)
+async function jornadaLosillaDe(j) {
+  const m = String(j.temporada || '').match(/^(\d{4})\//);
+  if (!m || !/^\d+$/.test(String(j.numero))) return null;
+  const temporada = Number(m[1]) + 1; // "2026/27" -> 2027
+  const numero = Number(j.numero);
+  for (const n of [numero, numero + 1, numero - 1, numero + 2, numero - 2, numero + 3, numero - 3]) {
+    if (n < 1) continue;
+    const r = await losilla.jornada(temporada, n);
+    if (r && (await coincideJornada(j.id, r))) return r;
+  }
+  return null;
+}
+
 async function completarCompeticiones() {
+  // Una sola vez: la primera version emparejaba solo por numero y clasifico
+  // (y piso resultados de) jornadas que no eran. Se vuelven a emparejar todas.
+  const reparada = await db.get("SELECT valor FROM meta WHERE clave = 'competiciones_v2'");
+  if (!reparada) {
+    await db.run('UPDATE partidos SET competicion = NULL, division = NULL WHERE jornada_id IN (SELECT id FROM jornadas WHERE manual = 0)');
+    await db.run("DELETE FROM meta WHERE clave = 'competiciones_sin_datos'");
+    await db.run("INSERT INTO meta (clave, valor) VALUES ('competiciones_v2', '1')");
+  }
+
   const fila = await db.get("SELECT valor FROM meta WHERE clave = 'competiciones_sin_datos'");
   const sinDatos = new Set(fila && fila.valor ? fila.valor.split(',').map(Number) : []);
   const pendientes = (
@@ -173,9 +231,7 @@ async function completarCompeticiones() {
 
   let hechas = 0;
   for (const j of pendientes.slice(0, POR_VUELTA)) {
-    // "2026/27" -> 2027 (Losilla numera la temporada por el año en que acaba)
-    const m = String(j.temporada || '').match(/^(\d{4})\//);
-    const r = m && /^\d+$/.test(String(j.numero)) ? await losilla.jornada(Number(m[1]) + 1, Number(j.numero)) : null;
+    const r = await jornadaLosillaDe(j);
     if (!r) {
       sinDatos.add(Number(j.id));
       continue;
