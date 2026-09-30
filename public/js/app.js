@@ -438,9 +438,9 @@
       plenoHtml = `
         <div class="pleno-form" data-pleno-id="${pleno.id}">
           <strong>Pleno al 15:</strong> ${escapeHtml(pleno.equipo_local)}
-          <input type="number" min="0" data-goles="local" value="${escapeHtml(gl || '')}" />
+          ${htmlSelectGoles('data-goles', 'local', gl, `Goles ${pleno.equipo_local}`)}
           -
-          <input type="number" min="0" data-goles="visitante" value="${escapeHtml(gv || '')}" />
+          ${htmlSelectGoles('data-goles', 'visitante', gv, `Goles ${pleno.equipo_visitante}`)}
           ${escapeHtml(pleno.equipo_visitante)}
         </div>
       `;
@@ -587,6 +587,16 @@
     await accionResultados(accion, bloque, jornadaId);
   });
 
+  // Desplegable de goles del Pleno al 15: 0, 1, 2 o M (3 o mas). Un valor
+  // guardado con goles exactos ("4") sale como M.
+  function htmlSelectGoles(atributo, lado, valor, etiqueta) {
+    const actual = valor === undefined || valor === '' ? '' : String(valor).toUpperCase() === 'M' || Number(valor) >= 3 ? 'M' : String(Number(valor));
+    const opciones = [['', '–'], ['0', '0'], ['1', '1'], ['2', '2'], ['M', 'M']]
+      .map(([v, texto]) => `<option value="${v}" ${v === actual ? 'selected' : ''}>${texto}</option>`)
+      .join('');
+    return `<select class="select-goles" ${atributo}="${lado}" aria-label="${escapeHtml(etiqueta)}" title="0, 1, 2 o M (3 o más goles)">${opciones}</select>`;
+  }
+
   // Lee las dos casillas de goles (un numero o "M" = 3 o mas) de un Pleno.
   // Devuelve "2-M", "" si estan vacias, o null (tras avisar) si no son validas.
   function leerGolesPleno(contenedor, nombre) {
@@ -616,7 +626,10 @@
     if (pleno) {
       const valor = leerGolesPleno(pleno, 'Pleno al 15');
       if (valor === null) return;
-      resultados[pleno.dataset.resPleno] = valor;
+      // El desplegable enseña "4-1" como "M-1": si no se ha cambiado, se deja el
+      // marcador exacto (y no pasa a estar puesto a mano)
+      const original = pleno.dataset.original || '';
+      resultados[pleno.dataset.resPleno] = original && categoriaPleno(original) === categoriaPleno(valor) ? original : valor;
     }
     const body = { resultados };
     const definitivo = bloque.querySelector('[data-res-definitivo]');
@@ -782,10 +795,10 @@
       if (p.es_pleno) {
         const [gl, gv] = (p.resultado || '').split('-');
         return `
-          <td class="col-resultado editando" data-res-pleno="${p.id}">
-            <input type="text" maxlength="2" data-res-goles="local" value="${escapeHtml(gl || '')}" aria-label="Goles local (número o M)" title="Goles o M (3 o más)" />
+          <td class="col-resultado editando" data-res-pleno="${p.id}" data-original="${escapeHtml(p.resultado || '')}">
+            ${htmlSelectGoles('data-res-goles', 'local', gl, 'Goles local')}
             -
-            <input type="text" maxlength="2" data-res-goles="visitante" value="${escapeHtml(gv || '')}" aria-label="Goles visitante (número o M)" title="Goles o M (3 o más)" />
+            ${htmlSelectGoles('data-res-goles', 'visitante', gv, 'Goles visitante')}
           </td>
         `;
       }
@@ -812,9 +825,9 @@
   function htmlInputsPlenoDefinitivo(plenoDefinitivo) {
     const [dl, dv] = (plenoDefinitivo || '').split('-');
     return `
-      <input type="text" maxlength="2" data-res-goles="local" value="${escapeHtml(dl || '')}" aria-label="Pleno definitivo: goles local (número o M)" title="Goles o M (3 o más)" />
+      ${htmlSelectGoles('data-res-goles', 'local', dl, 'Pleno definitivo: goles local')}
       -
-      <input type="text" maxlength="2" data-res-goles="visitante" value="${escapeHtml(dv || '')}" aria-label="Pleno definitivo: goles visitante (número o M)" title="Goles o M (3 o más)" />
+      ${htmlSelectGoles('data-res-goles', 'visitante', dv, 'Pleno definitivo: goles visitante')}
     `;
   }
 

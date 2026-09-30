@@ -547,6 +547,8 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
   flex-wrap: wrap;
 }
 .pleno-form input { width: 4rem; text-align: center; }
+.select-goles { width: 4rem; text-align: center; font-weight: 600; cursor: pointer; }
+.resultados-todos-tabla td.editando select.select-goles { width: 3.4rem; }
 
 .estado-lista {
   list-style: none;
