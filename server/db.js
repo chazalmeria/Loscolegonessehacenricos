@@ -75,6 +75,27 @@ const SCHEMA = [
     clave TEXT PRIMARY KEY,
     valor TEXT
   )`,
+  // Encuestas del lateral del chat: cualquiera crea una, cada uno vota una
+  // opcion (y la puede cambiar) y solo quien la creo la cierra o la borra.
+  `CREATE TABLE IF NOT EXISTS encuestas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    pregunta TEXT NOT NULL,
+    cerrada INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS encuesta_opciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    encuesta_id INTEGER NOT NULL REFERENCES encuestas(id) ON DELETE CASCADE,
+    orden INTEGER NOT NULL,
+    texto TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS encuesta_votos (
+    encuesta_id INTEGER NOT NULL REFERENCES encuestas(id) ON DELETE CASCADE,
+    username TEXT NOT NULL,
+    opcion_id INTEGER NOT NULL REFERENCES encuesta_opciones(id) ON DELETE CASCADE,
+    PRIMARY KEY (encuesta_id, username)
+  )`,
 ];
 
 // Columnas añadidas despues de la primera version. SQLite no tiene

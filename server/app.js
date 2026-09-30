@@ -10,6 +10,7 @@ const { router: jornadaRoutes } = require('./routes/jornada');
 const historialRoutes = require('./routes/historial');
 const economiaRoutes = require('./routes/economia');
 const adminRoutes = require('./routes/admin');
+const encuestasRoutes = require('./routes/encuestas');
 
 const app = express();
 app.set('trust proxy', 1); // necesario detras de un proxy (Vercel, Render, etc.)
@@ -34,6 +35,7 @@ app.use('/api/jornada', jornadaRoutes);
 app.use('/api/historial', historialRoutes);
 app.use('/api/economia', economiaRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/encuestas', encuestasRoutes);
 
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next();

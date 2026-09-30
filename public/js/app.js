@@ -86,10 +86,10 @@
   function entrarEnApp() {
     $('#usuario-actual').textContent = currentUser;
     showScreen('home');
-    ultimoMensajeId = 0;
-    $('#chat-messages').innerHTML = '';
+    reiniciarChat();
     cargarChat();
     iniciarSondeoChat();
+    cargarEncuestas();
     cargarJornada();
     cargarHistorial();
     cargarEconomia();
@@ -109,29 +109,243 @@
   });
 
   // ---------- CHAT (sondeo periodico, sin websockets: compatible con Vercel) ----------
+  // Cada usuario tiene su color de avatar (fijo, sacado de su nombre)
+  const COLORES_AVATAR = ['#2fbf71', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#ec4899', '#64748b'];
+  function colorDe(nombre) {
+    let h = 0;
+    for (const c of String(nombre)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return COLORES_AVATAR[h % COLORES_AVATAR.length];
+  }
+  function htmlAvatar(nombre, clase = 'avatar') {
+    return `<span class="${clase}" style="background:${colorDe(nombre)}" title="${escapeHtml(nombre)}">${escapeHtml(String(nombre).charAt(0).toUpperCase())}</span>`;
+  }
+
+  // Estado para agrupar mensajes seguidos del mismo autor y separar por dias
+  let chatUltimoAutor = null;
+  let chatUltimoDia = null;
+  let chatUltimaFecha = 0;
+
+  function fechaMensaje(msg) {
+    return new Date(msg.created_at.replace(' ', 'T') + 'Z');
+  }
+
+  function etiquetaDia(fecha) {
+    const hoy = new Date();
+    const ayer = new Date();
+    ayer.setDate(hoy.getDate() - 1);
+    if (fecha.toDateString() === hoy.toDateString()) return 'Hoy';
+    if (fecha.toDateString() === ayer.toDateString()) return 'Ayer';
+    return fecha.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+
+  function reiniciarChat() {
+    ultimoMensajeId = 0;
+    chatUltimoAutor = null;
+    chatUltimoDia = null;
+    chatUltimaFecha = 0;
+    $('#chat-messages').innerHTML = '';
+  }
+
   function pintarMensaje(msg) {
-    const div = document.createElement('div');
-    div.className = 'chat-msg' + (msg.username === currentUser ? ' mio' : '');
-    const hora = new Date(msg.created_at.replace(' ', 'T') + 'Z').toLocaleTimeString('es-ES', {
-      hour: '2-digit', minute: '2-digit',
-    });
-    div.innerHTML = `<span class="autor">${escapeHtml(msg.username)}<span class="hora">${hora}</span></span>${escapeHtml(msg.text)}`;
-    $('#chat-messages').appendChild(div);
-    $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+    const cont = $('#chat-messages');
+    const pegadoAbajo = cont.scrollHeight - cont.scrollTop - cont.clientHeight < 80;
+    const fecha = fechaMensaje(msg);
+    const dia = fecha.toDateString();
+    if (dia !== chatUltimoDia) {
+      const sep = document.createElement('div');
+      sep.className = 'chat-dia';
+      sep.innerHTML = `<span>${escapeHtml(etiquetaDia(fecha))}</span>`;
+      cont.appendChild(sep);
+      chatUltimoDia = dia;
+      chatUltimoAutor = null;
+    }
+
+    // Mismo autor en menos de 5 minutos: va pegado al anterior, sin nombre ni avatar
+    const seguido = msg.username === chatUltimoAutor && fecha - chatUltimaFecha < 5 * 60 * 1000;
+    const mio = msg.username === currentUser;
+    const esEncuesta = msg.text.startsWith('📊 Nueva encuesta:');
+    const hora = fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+    const fila = document.createElement('div');
+    fila.className = `chat-fila${mio ? ' mio' : ''}${seguido ? ' seguido' : ''}`;
+    fila.innerHTML = `
+      ${mio ? '' : seguido ? '<span class="avatar avatar-hueco"></span>' : htmlAvatar(msg.username)}
+      <div class="chat-msg${esEncuesta ? ' chat-msg-encuesta' : ''}">
+        ${seguido || mio ? '' : `<span class="autor" style="color:${colorDe(msg.username)}">${escapeHtml(msg.username)}</span>`}
+        <span class="texto">${escapeHtml(msg.text)}</span>
+        <span class="hora">${hora}</span>
+      </div>
+    `;
+    cont.appendChild(fila);
+    chatUltimoAutor = msg.username;
+    chatUltimaFecha = fecha.getTime();
+    if (pegadoAbajo || mio) cont.scrollTop = cont.scrollHeight;
     if (msg.id > ultimoMensajeId) ultimoMensajeId = msg.id;
   }
 
   async function cargarChat() {
     try {
       const { messages } = await api(`/api/chat/messages?since=${ultimoMensajeId}`);
+      const cont = $('#chat-messages');
+      const primeraCarga = ultimoMensajeId === 0;
       messages.forEach(pintarMensaje);
+      if (primeraCarga) cont.scrollTop = cont.scrollHeight;
+      if (primeraCarga && !messages.length) {
+        cont.innerHTML = '<div class="chat-vacio">Nadie ha dicho nada todavía. ¡Rompe el hielo! ⚽</div>';
+      } else if (messages.length) {
+        const vacio = cont.querySelector('.chat-vacio');
+        if (vacio) vacio.remove();
+      }
     } catch (e) { /* ignore */ }
   }
 
+  let ticksChat = 0;
   function iniciarSondeoChat() {
     detenerSondeoChat();
-    chatPollHandle = setInterval(cargarChat, 4000);
+    ticksChat = 0;
+    chatPollHandle = setInterval(() => {
+      cargarChat();
+      // Las encuestas se refrescan cada 3 vueltas (12 s), salvo si estas creando una
+      if (++ticksChat % 3 === 0 && $('#form-encuesta').hidden) cargarEncuestas();
+    }, 4000);
   }
+
+  // Emojis rapidos: se insertan donde este el cursor
+  $('.chat-emojis').addEventListener('click', (e) => {
+    const boton = e.target.closest('[data-emoji]');
+    if (!boton) return;
+    const input = $('#chat-input');
+    const ini = input.selectionStart ?? input.value.length;
+    const fin = input.selectionEnd ?? input.value.length;
+    input.value = input.value.slice(0, ini) + boton.dataset.emoji + input.value.slice(fin);
+    input.focus();
+    const pos = ini + boton.dataset.emoji.length;
+    input.setSelectionRange(pos, pos);
+  });
+
+  // ---------- ENCUESTAS (lateral derecho de Inicio) ----------
+  const MAX_OPCIONES_ENCUESTA = 6;
+  let encuestas = [];
+
+  async function cargarEncuestas() {
+    try {
+      ({ encuestas } = await api('/api/encuestas'));
+      pintarEncuestas();
+    } catch (e) { /* ignore */ }
+  }
+
+  function pintarEncuestas() {
+    const lista = $('#encuestas-lista');
+    if (!encuestas.length) {
+      lista.innerHTML = '<p class="encuestas-vacio">Aún no hay encuestas. Crea la primera con "+ Nueva".</p>';
+      return;
+    }
+    lista.innerHTML = encuestas.map(htmlEncuesta).join('');
+  }
+
+  function htmlEncuesta(e) {
+    const total = e.total_votos;
+    const max = Math.max(0, ...e.opciones.map((o) => o.votantes.length));
+    const opciones = e.opciones.map((o) => {
+      const n = o.votantes.length;
+      const pct = total ? Math.round((n / total) * 100) : 0;
+      const clases = ['encuesta-opcion'];
+      if (e.mi_voto === o.id) clases.push('votada');
+      if (e.cerrada && n > 0 && n === max) clases.push('ganadora');
+      return `
+        <button type="button" class="${clases.join(' ')}" data-accion="votar" data-opcion="${o.id}" ${e.cerrada ? 'disabled' : ''}>
+          <span class="encuesta-barra" style="width:${pct}%"></span>
+          <span class="encuesta-opcion-texto">${e.mi_voto === o.id ? '✓ ' : ''}${escapeHtml(o.texto)}</span>
+          <span class="encuesta-opcion-pct">${pct}%</span>
+          ${n ? `<span class="encuesta-votantes">${o.votantes.map((v) => htmlAvatar(v, 'avatar avatar-mini')).join('')}</span>` : ''}
+        </button>
+      `;
+    }).join('');
+
+    const acciones = e.autor === currentUser
+      ? `<div class="encuesta-acciones">
+           <button type="button" class="btn-link" data-accion="cerrar">${e.cerrada ? 'Reabrir' : 'Cerrar'}</button>
+           <button type="button" class="btn-link peligro" data-accion="borrar">Borrar</button>
+         </div>`
+      : '';
+
+    return `
+      <article class="encuesta${e.cerrada ? ' cerrada' : ''}" data-encuesta-id="${e.id}">
+        <p class="encuesta-pregunta">${escapeHtml(e.pregunta)}</p>
+        <p class="encuesta-meta">${htmlAvatar(e.autor, 'avatar avatar-mini')} ${escapeHtml(e.autor)} · ${total} voto${total === 1 ? '' : 's'}${e.cerrada ? ' · <strong>Cerrada</strong>' : ''}</p>
+        <div class="encuesta-opciones">${opciones}</div>
+        ${acciones}
+      </article>
+    `;
+  }
+
+  $('#encuestas-lista').addEventListener('click', async (ev) => {
+    const boton = ev.target.closest('[data-accion]');
+    if (!boton) return;
+    const id = Number(boton.closest('[data-encuesta-id]').dataset.encuestaId);
+    const accion = boton.dataset.accion;
+    try {
+      if (accion === 'votar') {
+        ({ encuestas } = await api(`/api/encuestas/${id}/votar`, {
+          method: 'POST',
+          body: JSON.stringify({ opcion_id: Number(boton.dataset.opcion) }),
+        }));
+      } else if (accion === 'cerrar') {
+        ({ encuestas } = await api(`/api/encuestas/${id}/cerrar`, { method: 'POST' }));
+      } else if (accion === 'borrar') {
+        if (!confirm('¿Borrar esta encuesta y todos sus votos?')) return;
+        ({ encuestas } = await api(`/api/encuestas/${id}`, { method: 'DELETE' }));
+      }
+      pintarEncuestas();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  function htmlInputOpcion(n) {
+    return `<input type="text" class="encuesta-opcion-input" maxlength="100" placeholder="Opción ${n}" />`;
+  }
+
+  function abrirFormEncuesta(abrir) {
+    const form = $('#form-encuesta');
+    form.hidden = !abrir;
+    $('#btn-nueva-encuesta').hidden = abrir;
+    $('#encuesta-error').hidden = true;
+    if (abrir) {
+      $('#encuesta-pregunta').value = '';
+      $('#encuesta-opciones').innerHTML = htmlInputOpcion(1) + htmlInputOpcion(2);
+      $('#btn-mas-opcion').hidden = false;
+      $('#encuesta-pregunta').focus();
+    }
+  }
+
+  $('#btn-nueva-encuesta').addEventListener('click', () => abrirFormEncuesta(true));
+  $('#btn-cancelar-encuesta').addEventListener('click', () => abrirFormEncuesta(false));
+  $('#btn-mas-opcion').addEventListener('click', () => {
+    const cont = $('#encuesta-opciones');
+    const n = cont.querySelectorAll('input').length;
+    if (n >= MAX_OPCIONES_ENCUESTA) return;
+    cont.insertAdjacentHTML('beforeend', htmlInputOpcion(n + 1));
+    cont.lastElementChild.focus();
+    if (n + 1 >= MAX_OPCIONES_ENCUESTA) $('#btn-mas-opcion').hidden = true;
+  });
+
+  $('#form-encuesta').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const errorEl = $('#encuesta-error');
+    errorEl.hidden = true;
+    const pregunta = $('#encuesta-pregunta').value.trim();
+    const opciones = $$('#encuesta-opciones input').map((i) => i.value.trim()).filter(Boolean);
+    try {
+      ({ encuestas } = await api('/api/encuestas', { method: 'POST', body: JSON.stringify({ pregunta, opciones }) }));
+      abrirFormEncuesta(false);
+      pintarEncuestas();
+      cargarChat(); // el aviso de la encuesta nueva sale en el chat
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }
+  });
 
   function detenerSondeoChat() {
     if (chatPollHandle) {

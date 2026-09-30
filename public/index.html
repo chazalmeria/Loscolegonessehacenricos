@@ -58,14 +58,54 @@
 
     <main class="content">
 
-      <!-- INICIO: CHAT -->
+      <!-- INICIO: CHAT + ENCUESTAS (lateral derecho) -->
       <div id="tab-inicio" class="tab-panel active">
-        <h2>Inicio</h2>
-        <div id="chat-messages" class="chat-messages"></div>
-        <form id="form-chat" class="chat-form">
-          <input id="chat-input" type="text" maxlength="1000" placeholder="Escribe algo..." autocomplete="off" />
-          <button type="submit" class="btn btn-primary">Enviar</button>
-        </form>
+        <div class="inicio-grid">
+          <section class="chat-card">
+            <header class="chat-header">
+              <div class="chat-header-icono" aria-hidden="true">⚽</div>
+              <div>
+                <h2 class="chat-titulo">El Vestuario</h2>
+                <p class="chat-subtitulo">Aquí se habla de fútbol, de dineros y de lo que surja</p>
+              </div>
+            </header>
+            <div id="chat-messages" class="chat-messages"></div>
+            <form id="form-chat" class="chat-form">
+              <div class="chat-emojis" role="group" aria-label="Emojis rápidos">
+                <button type="button" data-emoji="⚽">⚽</button>
+                <button type="button" data-emoji="😂">😂</button>
+                <button type="button" data-emoji="🔥">🔥</button>
+                <button type="button" data-emoji="🍺">🍺</button>
+                <button type="button" data-emoji="💸">💸</button>
+                <button type="button" data-emoji="🤞">🤞</button>
+                <button type="button" data-emoji="👏">👏</button>
+                <button type="button" data-emoji="🫵">🫵</button>
+              </div>
+              <div class="chat-form-fila">
+                <input id="chat-input" type="text" maxlength="1000" placeholder="Escribe algo..." autocomplete="off" />
+                <button type="submit" class="btn btn-primary chat-enviar" aria-label="Enviar">Enviar ➤</button>
+              </div>
+            </form>
+          </section>
+
+          <aside class="encuestas-panel">
+            <div class="tab-header-row encuestas-cabecera">
+              <h3>📊 Encuestas</h3>
+              <button type="button" id="btn-nueva-encuesta" class="btn btn-primary btn-small">+ Nueva</button>
+            </div>
+            <form id="form-encuesta" class="encuesta-form" hidden>
+              <input id="encuesta-pregunta" type="text" maxlength="200" placeholder="¿Qué queréis preguntar?" />
+              <div id="encuesta-opciones"></div>
+              <button type="button" id="btn-mas-opcion" class="btn btn-ghost btn-small">+ Añadir opción</button>
+              <p id="encuesta-error" class="error-msg" hidden></p>
+              <div class="encuesta-form-acciones">
+                <button type="button" id="btn-cancelar-encuesta" class="btn btn-ghost btn-small">Cancelar</button>
+                <button type="submit" class="btn btn-primary btn-small">Publicar</button>
+              </div>
+            </form>
+            <div id="encuestas-lista"></div>
+          </aside>
+        </div>
       </div>
 
       <!-- JORNADA -->

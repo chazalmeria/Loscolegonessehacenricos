@@ -8,7 +8,7 @@ App privada para el grupo: portada con acceso restringido, login compartido, cha
 
 - **Portada**: "Si no eres colegón o eres usero, no eres bienvenido" + botón de Login.
 - **Login**: 7 usuarios fijos (Burgos, Paquero, Jordan, Pepe, Largo, Joaquin, Miguel), todos con la contraseña `MaximianoGuapo`.
-- **Inicio**: chat entre todos los usuarios logueados (se actualiza solo cada 4 segundos).
+- **Inicio**: "El Vestuario", el chat entre todos los usuarios logueados (se actualiza solo cada 4 segundos), con avatares de colores, separadores por día y emojis rápidos. En el lateral derecho, **Encuestas**: cualquiera crea una (pregunta + 2 a 6 opciones), cada uno vota una opción y puede cambiarla o quitarla (pulsando otra vez), y se ve quién ha votado qué. Solo quien la crea puede cerrarla (ya no admite votos) o borrarla. Al crear una sale un aviso en el chat.
 - **Jornada**: la jornada de La Quiniela llega sola desde la API pública de Eduardo Losilla (15 partidos + Pleno al 15) y cada usuario rellena su propia columna de pronósticos (1 / X / 2). Se ve quién ha completado ya su quiniela. Si la API falla, el botón "Crear jornada manualmente" crea otra jornada que aparece encima de la de la API, con su título y la etiqueta "(a mano)", y que se pasa al Historial con "Añadir al histórico".
 - **Rankings**: dos pestañas sobre las jornadas del Historial. "Aciertos": resultados acertados en total (incluido cada Pleno al 15) y % de acierto. "Dineros": premios acumulados por columna; mientras nadie haya ganado nada sale "Sois unos paquetes".
 - **Economía**: lo que lleva cada uno (+/-) en el bote común y el total. Se cambia a mano con "Modificar saldos" (cualquier usuario); se guarda quién y cuándo lo cambió por última vez.
@@ -129,6 +129,7 @@ quiniela-colegas/
 │   └── routes/
 │       ├── auth.js         # login / logout / usuario actual
 │       ├── chat.js         # mensajes del chat (sondeo periodico)
+│       ├── encuestas.js    # encuestas del lateral del chat
 │       ├── jornada.js      # partidos de la semana + pronosticos
 │       ├── historial.js    # pronosticos pasados por usuario
 │       ├── economia.js     # saldo de cada uno en el bote comun (a mano)
