@@ -5,43 +5,6 @@ const db = require('./db');
 
 const CATEGORIAS = [15, 14, 13, 12, 11, 10];
 
-// Categoria de la API -> aciertos. loteriasapi.com usa nombres tipo
-// "1ª (14 Aciertos)" o "Especial (14 + Pleno)"; en su documentacion aparece
-// tambien "Pleno al 15". Devuelve null si no se reconoce.
-function aciertosDeCategoria(premio) {
-  const nombre = String(premio.categoryName || premio.category || '');
-  if (/pleno|especial|15/i.test(nombre)) return 15;
-  const m = nombre.match(/(1[0-4])\s*aciertos?/i) || nombre.match(/\b(1[0-4])\b/);
-  if (m) return Number(m[1]);
-  // Solo el ordinal ("3ª categoría"): 1ª = 14 aciertos ... 5ª = 10 aciertos
-  const ordinal = nombre.match(/\b([1-5])\s*[ªa]/i);
-  return ordinal ? 15 - Number(ordinal[1]) : null;
-}
-
-// Importe en centimos: prizeAmount viene en centimos como texto ("2550784" =
-// 25.507,84 €); en la documentacion tambien aparece "prize" en euros (215324.18).
-function centimosDePremio(premio) {
-  if (premio.prizeAmount !== undefined && premio.prizeAmount !== null && /^\d+$/.test(String(premio.prizeAmount))) {
-    return Number(premio.prizeAmount);
-  }
-  if (typeof premio.prize === 'number') return Math.round(premio.prize * 100);
-  return null;
-}
-
-function normalizarPremiosApi(prizes) {
-  const premios = [];
-  for (const p of prizes || []) {
-    const aciertos = aciertosDeCategoria(p);
-    if (!aciertos || premios.some((x) => x.aciertos === aciertos)) continue;
-    premios.push({
-      aciertos,
-      acertantes: Number.isFinite(Number(p.winners)) ? Number(p.winners) : null,
-      premio_centimos: centimosDePremio(p),
-    });
-  }
-  return premios;
-}
-
 async function getPremios(jornadaId) {
   const filas = await db.all(
     'SELECT aciertos, acertantes, premio_centimos, manual FROM premios WHERE jornada_id = ? ORDER BY aciertos DESC',
@@ -80,4 +43,4 @@ async function getPremiosUsuario(jornadaId) {
   return Object.fromEntries(filas.map((f) => [f.username, Number(f.premio_centimos)]));
 }
 
-module.exports = { CATEGORIAS, normalizarPremiosApi, getPremios, guardarPremiosApi, getPremiosUsuario };
+module.exports = { CATEGORIAS, getPremios, guardarPremiosApi, getPremiosUsuario };

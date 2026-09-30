@@ -2,9 +2,6 @@
 // la misma que usa su web. No pide clave ni tiene cupo, y publica la jornada
 // abierta con sus 15 partidos en cuanto se puede apostar, los resultados
 // mientras se juegan y los premios cuando sale el escrutinio.
-//
-// Sustituye a loteriasapi.com, cuyo plan gratuito (1.000 peticiones/mes) se
-// agotaba y dejaba la web sin actualizar.
 
 const BASE_URL = 'https://api.eduardolosilla.es';
 

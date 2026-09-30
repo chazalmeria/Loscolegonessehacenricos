@@ -98,7 +98,7 @@ Con cualquiera de las dos opciones, te quedas con dos valores: la URL (`TURSO_DA
 
 ## Jornadas y resultados automáticos (Eduardo Losilla)
 
-La app lee La Quiniela de la API pública de [Eduardo Losilla](https://www.eduardolosilla.es) (`api.eduardolosilla.es`, la misma que usa su web). No necesita clave ni tiene cupo de peticiones. Hasta septiembre de 2026 se usaba loteriasapi.com, pero su plan gratuito se agotaba y la web dejaba de actualizarse.
+La app lee La Quiniela de la API pública de [Eduardo Losilla](https://www.eduardolosilla.es) (`api.eduardolosilla.es`, la misma que usa su web). No necesita clave ni tiene cupo de peticiones.
 
 - **Jornada nueva**: en cuanto se abre la jornada siguiente (antes de jugarse, para poder rellenar los pronósticos), se crea sola como jornada activa y la anterior de la API pasa al Historial. Las jornadas creadas a mano no se tocan nunca.
 - **Resultados**: se guarda el signo real de cada partido (1/X/2) y el marcador del Pleno al 15. En la tabla "Resultados de todos" (Jornada e Historial) cada casilla sale en verde si es acierto y en rojo si es fallo, con el recuento de aciertos de cada uno abajo. El Pleno se compara como en la quiniela oficial: 0, 1, 2 o M (3 o más goles) por equipo.
