@@ -56,10 +56,6 @@
         <button class="nav-item" data-tab="rankings">Rankings</button>
         <button class="nav-item" data-tab="estadisticas">Estadisticas</button>
       </nav>
-      <div class="sidebar-pie">
-        <button id="btn-ajustes" class="btn btn-ghost">⚙️ Ajustes</button>
-        <button id="btn-logout" class="btn btn-ghost">Cerrar sesión</button>
-      </div>
     </aside>
 
     <!-- AJUSTES: foto de perfil -->
@@ -88,6 +84,13 @@
         </div>
       </form>
     </dialog>
+
+    <div class="main-col">
+    <!-- Barra superior: Ajustes y Cerrar sesion en la esquina derecha -->
+    <header class="topbar">
+      <button id="btn-ajustes" class="btn btn-ghost btn-small">⚙️ Ajustes</button>
+      <button id="btn-logout" class="btn btn-ghost btn-small">Cerrar sesión</button>
+    </header>
 
     <main class="content">
 
@@ -207,6 +210,7 @@
       </div>
 
     </main>
+    </div>
   </section>
 
   <script src="/js/app.js"></script>

@@ -153,7 +153,14 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
 .nav-item:hover { background: rgba(47, 191, 113, 0.1); color: var(--text); }
 .nav-item.active { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 
-.sidebar-pie { margin-top: auto; display: flex; flex-direction: column; gap: .5rem; }
+.main-col { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: .5rem;
+  padding: .8rem 1.2rem 0;
+}
 .usuario-actual-fila { display: flex; align-items: center; gap: .4rem; }
 
 /* Fotos de perfil: <img> con la misma forma que el avatar de la inicial */
@@ -183,7 +190,7 @@ img.avatar { object-fit: cover; background: var(--bg-alt); }
 
 .content {
   flex-grow: 1;
-  padding: 2rem;
+  padding: .6rem 2rem 2rem;
   max-width: 900px;
   width: 100%;
   margin: 0 auto;
@@ -765,7 +772,7 @@ img.avatar { object-fit: cover; background: var(--bg-alt); }
   .sidebar { width: 100%; flex-direction: row; align-items: center; flex-wrap: wrap; }
   .sidebar-header { margin-bottom: 0; }
   .sidebar-nav { flex-direction: row; flex-wrap: wrap; flex-grow: 1; }
-  .sidebar-pie { margin-top: 0; flex-direction: row; }
+  .topbar { padding: .6rem 1.2rem 0; }
   .content { padding: 1.2rem; }
   .partido-editor-row { grid-template-columns: 1.2rem 1fr 1fr; }
 }
