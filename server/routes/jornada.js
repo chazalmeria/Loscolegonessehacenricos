@@ -7,9 +7,12 @@ const { requireAuth, USERS } = require('../auth');
 const router = express.Router();
 
 // Jornadas abiertas (activa = 1): las creadas a mano primero (mas nueva
-// arriba) y despues la de la API.
+// arriba) y despues las de la API de la mas antigua a la mas nueva, para que
+// la que se esta jugando (en juego) quede encima de la siguiente.
 async function getJornadasAbiertas() {
-  return db.all('SELECT * FROM jornadas WHERE activa = 1 ORDER BY manual DESC, id DESC');
+  return db.all(
+    'SELECT * FROM jornadas WHERE activa = 1 ORDER BY manual DESC, CASE WHEN manual = 1 THEN -id ELSE id END'
+  );
 }
 
 async function getPartidos(jornadaId) {
@@ -57,7 +60,7 @@ router.get('/current', requireAuth, async (req, res, next) => {
       const partidos = await getPartidos(jornada.id);
       const prediccionesDeTodos = await getPrediccionesDeTodos(jornada.id);
       jornadas.push({
-        jornada: { ...jornada, manual: !!jornada.manual },
+        jornada: { ...jornada, manual: !!jornada.manual, en_juego: !!jornada.en_juego },
         partidos: partidos.map((p) => {
           const predicciones = prediccionesDeTodos[p.id] || {};
           return { ...p, mi_pronostico: predicciones[req.username] || '', predicciones };
@@ -119,13 +122,15 @@ router.post('/', requireAuth, async (req, res, next) => {
   }
 });
 
-// Pasar una jornada creada a mano al Historial
+// Pasar al Historial una jornada creada a mano, o una de la API en juego que
+// se haya quedado atascada (p. ej. si el escrutinio no llega)
 router.post('/:id/archivar', requireAuth, async (req, res, next) => {
   try {
-    const info = await db.run('UPDATE jornadas SET activa = 0 WHERE id = ? AND manual = 1 AND activa = 1', [
-      Number(req.params.id),
-    ]);
-    if (!info.changes) return res.status(404).json({ error: 'No hay ninguna jornada a mano abierta con ese id' });
+    const info = await db.run(
+      'UPDATE jornadas SET activa = 0, en_juego = 0 WHERE id = ? AND activa = 1 AND (manual = 1 OR en_juego = 1)',
+      [Number(req.params.id)]
+    );
+    if (!info.changes) return res.status(404).json({ error: 'No hay ninguna jornada que se pueda archivar con ese id' });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -276,7 +281,10 @@ router.post('/predicciones', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Formato invalido' });
     }
 
-    const jornada = await db.get('SELECT id FROM jornadas WHERE id = ? AND activa = 1', [Number(jornadaId)]);
+    // Una jornada en juego ya no admite pronosticos (salio la siguiente)
+    const jornada = await db.get('SELECT id FROM jornadas WHERE id = ? AND activa = 1 AND en_juego = 0', [
+      Number(jornadaId),
+    ]);
     if (!jornada) return res.status(400).json({ error: 'Esa jornada ya no está abierta' });
 
     const partidos = await getPartidos(jornada.id);

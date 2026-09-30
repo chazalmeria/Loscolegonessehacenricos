@@ -94,6 +94,10 @@ const MIGRACIONES = [
   // Pleno al 15 comun que juega el grupo ("2-1", "M-0"...). Solo se pone a mano
   // desde "Resultados de todos".
   'ALTER TABLE jornadas ADD COLUMN pleno_definitivo TEXT',
+  // 1 = jornada de la API que se esta jugando: ya salio la siguiente, asi que
+  // sus pronosticos estan congelados, pero sigue en la pestaña Jornada (encima
+  // de la nueva) hasta tener todos los resultados y los premios.
+  'ALTER TABLE jornadas ADD COLUMN en_juego INTEGER NOT NULL DEFAULT 0',
   // Evita crear dos veces la misma jornada si dos peticiones sincronizan a la vez
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_jornadas_draw_id ON jornadas(draw_id)',
 ];

@@ -154,7 +154,8 @@
 
   // ---------- JORNADA ----------
   // Puede haber varias jornadas abiertas a la vez: las creadas a mano (arriba)
-  // y la que llega de la API (Eduardo Losilla). Cada una se pinta en su propio bloque.
+  // y las de la API (Eduardo Losilla): la que se esta jugando ("en juego", ya
+  // sin pronosticos) encima de la siguiente. Cada una se pinta en su propio bloque.
   let usuariosJornada = [];
   const bloquesJornada = new Map(); // jornada id -> { jornada, partidos, estado } (lo ultimo pintado)
   const editandoResultados = new Set(); // jornadas con "Poner resultados" abierto
@@ -167,12 +168,12 @@
       usuariosJornada = data.usuarios || [];
       const jornadas = data.jornadas || [];
       const manuales = jornadas.filter((j) => j.jornada.manual);
-      const deLaApi = jornadas.find((j) => !j.jornada.manual);
+      const deLaApi = jornadas.filter((j) => !j.jornada.manual);
       bloquesJornada.clear();
 
       $('#jornadas-manuales').innerHTML = manuales.map(htmlBloqueJornada).join('');
-      $('#jornada-api').innerHTML = deLaApi
-        ? htmlBloqueJornada(deLaApi)
+      $('#jornada-api').innerHTML = deLaApi.length
+        ? deLaApi.map(htmlBloqueJornada).join('')
         : `<div class="empty-state"><p>Todavía no hay jornada de la API. En cuanto se abra la próxima jornada aparecerá aquí sola. Si no funciona, usa "Crear jornada manualmente".</p></div>`;
     } catch (e) {
       console.error('Error cargando la jornada:', e);
@@ -188,6 +189,23 @@
 
   function htmlBloqueJornada({ jornada: datosJornada, partidos, estado, premios, premios_usuario: premiosUsuario }) {
     const jornada = { ...datosJornada, premios: premios || [], premios_usuario: premiosUsuario || {} };
+    bloquesJornada.set(jornada.id, { jornada, partidos, estado, usuarios: usuariosJornada });
+
+    // Jornada en juego: ya salio la siguiente, asi que solo se ve lo que puso
+    // cada uno, los resultados y los premios. Pasa sola al Historial al terminar.
+    if (jornada.en_juego) {
+      return `
+        <section class="jornada-bloque jornada-bloque-en-juego" data-jornada-id="${jornada.id}">
+          <div class="tab-header-row">
+            <h3 class="jornada-bloque-titulo">${tituloJornada(jornada)} <span class="etiqueta-en-juego">En juego</span></h3>
+            <button type="button" class="btn btn-ghost btn-small" data-accion="archivar">Añadir al histórico</button>
+          </div>
+          <p class="resultados-todos-hint">Ya no se pueden cambiar los pronósticos. Pasará sola al Historial cuando estén todos los resultados y los premios.</p>
+          ${htmlResultadosDeTodos(jornada, partidos, usuariosJornada)}
+        </section>
+      `;
+    }
+
     const filas = partidos.filter((p) => !p.es_pleno).map((p) => `
       <tr>
         <td>${p.orden}</td>
@@ -216,8 +234,6 @@
     const estadoHtml = (estado || []).map((u) => `
       <li class="${u.completado ? 'completado' : ''}">${escapeHtml(u.username)}: ${u.rellenados}/${u.total}${u.completado ? ' ✓' : ''}</li>
     `).join('');
-
-    bloquesJornada.set(jornada.id, { jornada, partidos, estado, usuarios: usuariosJornada });
 
     return `
       <section class="jornada-bloque${jornada.manual ? ' jornada-bloque-manual' : ''}" data-jornada-id="${jornada.id}">
@@ -438,7 +454,10 @@
 
   async function archivarJornada(bloque, jornadaId) {
     const titulo = bloque.querySelector('.jornada-bloque-titulo').textContent.trim();
-    if (!confirm(`¿Pasar "${titulo}" al histórico? Ya no se podrán cambiar los pronósticos.`)) return;
+    const aviso = bloque.classList.contains('jornada-bloque-en-juego')
+      ? 'Los resultados y premios que falten seguirán llegando solos.'
+      : 'Ya no se podrán cambiar los pronósticos.';
+    if (!confirm(`¿Pasar "${titulo}" al histórico? ${aviso}`)) return;
     try {
       await api(`/api/jornada/${jornadaId}/archivar`, { method: 'POST' });
       await cargarJornada();

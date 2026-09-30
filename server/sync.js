@@ -1,9 +1,11 @@
 // Sincroniza la app con la API publica de Eduardo Losilla (ver server/losilla.js):
 //   1. Si hay una jornada abierta nueva (sus 15 partidos), la crea como
-//      jornada activa. La anterior de la API pasa sola al Historial. Las
-//      jornadas creadas a mano (manual = 1) no se tocan nunca.
+//      jornada activa. La anterior de la API queda "en juego" (en_juego = 1):
+//      sigue en la pestaña Jornada, encima de la nueva, con los pronosticos
+//      congelados. Las jornadas creadas a mano (manual = 1) no se tocan nunca.
 //   2. Rellena el resultado real de cada partido (signo 1/X/2 y, en el Pleno
 //      al 15, los goles) y los premios en las ultimas jornadas enlazadas.
+//   3. Pasa al Historial las jornadas en juego que ya han terminado.
 //
 // Se lanza desde el cron diario de Vercel (/api/admin/sync) y, ademas, cuando
 // alguien abre Jornada o Historial, como mucho una vez cada INTERVALO_MIN
@@ -36,7 +38,8 @@ async function aplicarResultados(jornadaId, resultado) {
 
 async function crearJornada(resultado) {
   return db.tx(async (t) => {
-    await t.run('UPDATE jornadas SET activa = 0 WHERE activa = 1 AND manual = 0');
+    // La que estaba abierta pasa a "en juego": sigue en Jornada, sin pronosticos
+    await t.run('UPDATE jornadas SET en_juego = 1 WHERE activa = 1 AND manual = 0');
     const info = await t.run(
       'INSERT INTO jornadas (numero, temporada, activa, draw_id, draw_date) VALUES (?, ?, 1, ?, ?)',
       [resultado.numero, resultado.temporada, resultado.drawId, resultado.drawDate]
@@ -93,8 +96,30 @@ async function sincronizar() {
     if (r.premios.length) resumen.premiosActualizados += await premios.guardarPremiosApi(jornada.id, r.premios);
   }
 
+  // 3. Las jornadas en juego terminadas pasan al Historial
+  resumen.alHistorial = await archivarTerminadas(resultados);
+
   await marcarSync();
   return resumen;
+}
+
+// Una jornada en juego pasa al Historial cuando tiene el resultado de todos
+// sus partidos y los premios, o cuando ya no esta entre las que revisa la
+// sincronizacion (no le van a llegar mas datos).
+async function archivarTerminadas(resultados) {
+  const revisadas = new Set(resultados.map((r) => r.drawId));
+  const enJuego = await db.all('SELECT id, draw_id FROM jornadas WHERE activa = 1 AND en_juego = 1');
+  let archivadas = 0;
+  for (const j of enJuego) {
+    const pendientes = await db.get('SELECT COUNT(*) AS n FROM partidos WHERE jornada_id = ? AND resultado IS NULL', [j.id]);
+    const conPremios = await db.get('SELECT COUNT(*) AS n FROM premios WHERE jornada_id = ?', [j.id]);
+    const terminada = Number(pendientes.n) === 0 && Number(conPremios.n) > 0;
+    if (terminada || !revisadas.has(j.draw_id)) {
+      await db.run('UPDATE jornadas SET activa = 0, en_juego = 0 WHERE id = ?', [j.id]);
+      archivadas++;
+    }
+  }
+  return archivadas;
 }
 
 function marcarSync() {

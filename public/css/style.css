@@ -272,6 +272,18 @@ input:focus, select:focus { outline: 2px solid var(--primary); }
 }
 .jornada-bloque-titulo { margin: .6rem 0 0; }
 .etiqueta-manual { color: var(--text-dim); font-weight: 500; font-size: .85em; }
+.jornada-bloque-en-juego + .jornada-bloque { margin-top: 2rem; }
+.etiqueta-en-juego {
+  display: inline-block;
+  margin-left: .4rem;
+  padding: .1rem .5rem;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: .7em;
+  font-weight: 600;
+  vertical-align: middle;
+}
 .jornada-bloque .btn-guardar { margin-top: 1rem; }
 
 .jornada-tabla {
