@@ -773,8 +773,10 @@
   }
 
   function htmlTablaResultados(usuarios, partidos, { conColumnaResultado = true, editable = false, plenoDefinitivo = null, editandoDefinitivo = false, jornadaPremios = null } = {}) {
+    // El Pleno al 15 de cada uno se ve en la tabla pero no suma: solo cuentan los 14
     const aciertos = Object.fromEntries(usuarios.map((u) => [u, 0]));
-    const conResultado = partidos.filter((p) => p.resultado).length;
+    const normales = partidos.filter((p) => !p.es_pleno);
+    const conResultado = normales.filter((p) => p.resultado).length;
 
     const cabecera = `
       <tr>
@@ -791,7 +793,7 @@
         const valor = (p.predicciones && p.predicciones[u]) || '';
         if (!valor) return `<td class="valor-vacio">—</td>`;
         const acierto = esAcierto(p, valor);
-        if (acierto) aciertos[u]++;
+        if (acierto && !p.es_pleno) aciertos[u]++;
         const clase = acierto === true ? 'acierto' : acierto === false ? 'fallo' : 'valor-relleno';
         return `<td class="${clase}">${escapeHtml(valor)}</td>`;
       }).join('');
@@ -804,7 +806,7 @@
     const pie = conResultado === 0 ? '' : `
       <tr>
         <td>Aciertos</td>
-        <td class="col-resultado">${conResultado}/${partidos.length}</td>
+        <td class="col-resultado">${conResultado}/${normales.length}</td>
         ${usuarios.map((u) => `<td>${aciertos[u]}/${conResultado}</td>`).join('')}
       </tr>
       ${jornadaPremios ? htmlFilaPremio(usuarios, partidos, jornadaPremios, conColumnaResultado) : ''}
@@ -1047,6 +1049,7 @@
       for (const j of jornadas) {
         let jugo = false;
         for (const p of j.partidos) {
+          if (p.es_pleno) continue; // el Pleno al 15 es solo informativo
           const valor = p.predicciones && p.predicciones[username];
           if (valor) jugo = true;
           const acierto = esAcierto(p, valor);
@@ -1107,7 +1110,7 @@
         </tr>
       `).join('');
       cont.innerHTML = `
-        <p class="resultados-todos-hint">Resultados acertados en las ${nJornadas} (incluido cada Pleno al 15). El % es sobre los partidos con resultado en los que puso pronóstico.</p>
+        <p class="resultados-todos-hint">Resultados acertados en las ${nJornadas} (los 14 partidos; el Pleno al 15 no cuenta). El % es sobre los partidos con resultado en los que puso pronóstico.</p>
         <div class="resultados-todos-tabla-scroll ranking-wrap">
           <table class="resultados-todos-tabla ranking-tabla">
             <thead><tr><th>#</th><th>Usuario</th><th>Aciertos</th><th>% acierto</th><th>Jornadas</th></tr></thead>
