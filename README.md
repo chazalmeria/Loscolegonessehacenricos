@@ -8,6 +8,7 @@ App privada para el grupo: portada con acceso restringido, login compartido, cha
 
 - **Portada**: "Si no eres colegón o eres usero, no eres bienvenido" + botón de Login.
 - **Login**: 7 usuarios fijos (Burgos, Paquero, Jordan, Pepe, Largo, Joaquin, Miguel), todos con la contraseña `MaximianoGuapo`.
+- **Estadísticas**: % de acierto por competición (Primera, Segunda, Femenino, Selecciones, Europa, Copa, Otras ligas), del grupo o de cada uno, y una tabla competición × usuario con el mejor de cada una. Sobre las jornadas del Historial y solo los 14 partidos. La competición de cada partido la calcula `server/competiciones.js` con los nombres y el código de división de Eduardo Losilla; las jornadas antiguas se completan solas, unas pocas en cada sincronización.
 - **Inicio**: "El Vestuario", el chat entre todos los usuarios logueados (se actualiza solo cada 4 segundos), con avatares de colores, separadores por día y emojis rápidos. En el lateral derecho, **Encuestas**: cualquiera crea una (pregunta + 2 a 6 opciones), cada uno vota una opción y puede cambiarla o quitarla (pulsando otra vez), y se ve quién ha votado qué. Solo quien la crea puede cerrarla (ya no admite votos) o borrarla. Al crear una sale un aviso en el chat.
 - **Jornada**: la jornada de La Quiniela llega sola desde la API pública de Eduardo Losilla (15 partidos + Pleno al 15) y cada usuario rellena su propia columna de pronósticos (1 / X / 2). Se ve quién ha completado ya su quiniela. Si la API falla, el botón "Crear jornada manualmente" crea otra jornada que aparece encima de la de la API, con su título y la etiqueta "(a mano)", y que se pasa al Historial con "Añadir al histórico".
 - **Rankings**: dos pestañas sobre las jornadas del Historial. "Aciertos": resultados acertados en total (incluido cada Pleno al 15) y % de acierto. "Dineros": premios acumulados por columna; mientras nadie haya ganado nada sale "Sois unos paquetes".
@@ -124,6 +125,7 @@ quiniela-colegas/
 │   ├── db.js              # acceso a datos (Turso / SQLite via @libsql/client)
 │   ├── auth.js             # usuarios fijos + contraseña compartida + cookie firmada
 │   ├── losilla.js          # cliente de la API pública de Eduardo Losilla (La Quiniela)
+│   ├── competiciones.js    # clasifica cada partido en su competición (Estadísticas)
 │   ├── sync.js             # crea jornadas nuevas y rellena resultados y premios desde la API
 │   ├── premios.js          # premios por categoria (API o a mano)
 │   └── routes/

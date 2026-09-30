@@ -3,6 +3,8 @@
 // abierta con sus 15 partidos en cuanto se puede apostar, los resultados
 // mientras se juegan y los premios cuando sale el escrutinio.
 
+const { clasificar } = require('./competiciones');
+
 const BASE_URL = 'https://api.eduardolosilla.es';
 
 async function pedir(path) {
@@ -55,6 +57,8 @@ async function jornada(temporada, numero) {
       visitante: String(p.visitante || '').trim(),
       signo: ['1', 'X', '2'].includes(p.signo) ? p.signo : null,
       marcador: limpiarMarcador(p.resultado),
+      division: Number.isFinite(Number(p.division)) ? Number(p.division) : null,
+      competicion: clasificar(p.local, p.visitante, p.division),
     }))
     .sort((a, b) => a.posicion - b.posicion);
   if (partidos.length === 0) return null;

@@ -19,14 +19,18 @@ const INTERVALO_MIN = 30;
 
 async function aplicarResultados(jornadaId, resultado) {
   const partidos = await db.all(
-    'SELECT id, orden, es_pleno, resultado, resultado_manual FROM partidos WHERE jornada_id = ?',
+    'SELECT id, orden, es_pleno, resultado, resultado_manual, competicion FROM partidos WHERE jornada_id = ?',
     [jornadaId]
   );
   let actualizados = 0;
   for (const p of partidos) {
-    if (p.resultado_manual) continue; // lo puso alguien a mano: no se pisa
     const api = resultado.partidos.find((x) => x.posicion === (p.es_pleno ? 15 : p.orden));
     if (!api) continue;
+    // Competicion para Estadisticas (las jornadas antiguas no la tenian)
+    if (!p.competicion && api.competicion) {
+      await db.run('UPDATE partidos SET competicion = ?, division = ? WHERE id = ?', [api.competicion, api.division, p.id]);
+    }
+    if (p.resultado_manual) continue; // lo puso alguien a mano: no se pisa
     const valor = p.es_pleno ? api.marcador : api.signo;
     if (valor && valor !== p.resultado) {
       await db.run('UPDATE partidos SET resultado = ? WHERE id = ?', [valor, p.id]);
@@ -49,8 +53,9 @@ async function crearJornada(resultado, { enJuego = false } = {}) {
     for (const p of resultado.partidos) {
       const esPleno = p.posicion === 15;
       await t.run(
-        'INSERT INTO partidos (jornada_id, orden, equipo_local, equipo_visitante, es_pleno) VALUES (?, ?, ?, ?, ?)',
-        [id, esPleno ? 99 : p.posicion, p.local, p.visitante, esPleno ? 1 : 0]
+        `INSERT INTO partidos (jornada_id, orden, equipo_local, equipo_visitante, es_pleno, division, competicion)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, esPleno ? 99 : p.posicion, p.local, p.visitante, esPleno ? 1 : 0, p.division, p.competicion]
       );
     }
     return id;
@@ -100,6 +105,9 @@ async function sincronizar() {
   // 3. Las jornadas en juego terminadas pasan al Historial
   resumen.alHistorial = await archivarTerminadas(resultados);
 
+  // 4. Competicion de los partidos de jornadas antiguas (unas pocas por vuelta)
+  resumen.competicionesCompletadas = await completarCompeticiones();
+
   await marcarSync();
   return resumen;
 }
@@ -146,6 +154,44 @@ async function importarJornada(temporada, numero, pronosticos) {
   const resultados = await aplicarResultados(jornada.id, r);
   if (r.premios.length) await premios.guardarPremiosApi(jornada.id, r.premios);
   return { jornadaId: jornada.id, pronosticosGuardados: guardados, resultadosActualizados: resultados };
+}
+
+// Las jornadas de la API creadas antes de guardar la competicion no la tienen:
+// se pide cada una a Losilla (por temporada + numero) y se rellena. Como mucho
+// POR_VUELTA jornadas en cada sincronizacion; las que Losilla no tenga se
+// apuntan en meta para no volver a pedirlas.
+const POR_VUELTA = 4;
+async function completarCompeticiones() {
+  const fila = await db.get("SELECT valor FROM meta WHERE clave = 'competiciones_sin_datos'");
+  const sinDatos = new Set(fila && fila.valor ? fila.valor.split(',').map(Number) : []);
+  const pendientes = (
+    await db.all(
+      `SELECT DISTINCT j.id, j.numero, j.temporada FROM jornadas j JOIN partidos p ON p.jornada_id = j.id
+       WHERE j.manual = 0 AND p.competicion IS NULL ORDER BY j.id DESC`
+    )
+  ).filter((j) => !sinDatos.has(Number(j.id)));
+
+  let hechas = 0;
+  for (const j of pendientes.slice(0, POR_VUELTA)) {
+    // "2026/27" -> 2027 (Losilla numera la temporada por el año en que acaba)
+    const m = String(j.temporada || '').match(/^(\d{4})\//);
+    const r = m && /^\d+$/.test(String(j.numero)) ? await losilla.jornada(Number(m[1]) + 1, Number(j.numero)) : null;
+    if (!r) {
+      sinDatos.add(Number(j.id));
+      continue;
+    }
+    // aplicarResultados rellena la competicion (y los resultados que falten)
+    await aplicarResultados(j.id, r);
+    hechas++;
+  }
+  if (sinDatos.size) {
+    await db.run(
+      `INSERT INTO meta (clave, valor) VALUES ('competiciones_sin_datos', ?)
+       ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor`,
+      [[...sinDatos].join(',')]
+    );
+  }
+  return hechas;
 }
 
 // Una jornada en juego pasa al Historial cuando tiene el resultado de todos

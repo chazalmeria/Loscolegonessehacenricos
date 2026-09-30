@@ -70,6 +70,7 @@ router.get('/', requireAuth, async (req, res, next) => {
         equipo_local: p.equipo_local,
         equipo_visitante: p.equipo_visitante,
         es_pleno: !!p.es_pleno,
+        competicion: p.competicion || null,
         resultado: p.resultado || null,
         resultado_manual: !!p.resultado_manual,
         predicciones: prediccionesPorPartido[p.id] || {},

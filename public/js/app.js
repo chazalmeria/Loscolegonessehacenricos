@@ -105,6 +105,7 @@
       // Economia se recarga al abrirla (otro puede haber cambiado los saldos), salvo si se esta editando
       if (btn.dataset.tab === 'economia' && !editandoEconomia) cargarEconomia();
       if (btn.dataset.tab === 'rankings') cargarRankings();
+      if (btn.dataset.tab === 'estadisticas') cargarEstadisticas();
     });
   });
 
@@ -1273,6 +1274,156 @@
   function medalla(posicion) {
     return { 1: '🥇', 2: '🥈', 3: '🥉' }[posicion] || posicion;
   }
+
+  // ---------- ESTADISTICAS: % de acierto por competicion ----------
+  // Sobre las jornadas del Historial y solo los 14 partidos (el Pleno al 15 es
+  // informativo). % = aciertos / partidos con resultado en los que hubo pronostico.
+  const COMPETICIONES = [
+    ['primera', 'Primera'],
+    ['segunda', 'Segunda'],
+    ['femenino', 'Femenino'],
+    ['selecciones', 'Selecciones'],
+    ['europa', 'Europa'],
+    ['copa', 'Copa'],
+    ['otras', 'Otras ligas'],
+    ['sin', 'Sin clasificar'],
+  ];
+  const POCOS_DATOS = 10; // por debajo, el % se marca como poco fiable
+  let datosEstadisticas = null;
+  let estadisticasFiltro = 'grupo'; // 'grupo' o un usuario
+
+  async function cargarEstadisticas() {
+    try {
+      datosEstadisticas = await api('/api/historial');
+      pintarEstadisticas();
+    } catch (e) {
+      console.error('Error cargando las estadísticas:', e);
+    }
+  }
+
+  // { competicion: { total: {aciertos, n}, porUsuario: { usuario: {aciertos, n} }, partidos } }
+  function calcularEstadisticas(usuarios, jornadas) {
+    const res = {};
+    for (const j of jornadas) {
+      for (const p of j.partidos) {
+        if (p.es_pleno || !p.resultado) continue;
+        const comp = p.competicion || 'sin';
+        const c = (res[comp] = res[comp] || {
+          total: { aciertos: 0, n: 0 },
+          porUsuario: Object.fromEntries(usuarios.map((u) => [u, { aciertos: 0, n: 0 }])),
+          partidos: 0,
+        });
+        c.partidos++;
+        for (const u of usuarios) {
+          const acierto = esAcierto(p, p.predicciones && p.predicciones[u]);
+          if (acierto === null) continue;
+          c.porUsuario[u].n++;
+          c.total.n++;
+          if (acierto) {
+            c.porUsuario[u].aciertos++;
+            c.total.aciertos++;
+          }
+        }
+      }
+    }
+    return res;
+  }
+
+  const pct = (x) => (x.n ? Math.round((x.aciertos / x.n) * 100) : null);
+
+  function pintarEstadisticas() {
+    const cont = $('#estadisticas-contenido');
+    const { usuarios, jornadas } = datosEstadisticas;
+    const stats = calcularEstadisticas(usuarios, jornadas);
+    const comps = COMPETICIONES.filter(([k]) => stats[k] && stats[k].total.n > 0);
+    if (!comps.length) {
+      cont.innerHTML = '<div class="empty-state"><p>Todavía no hay partidos con resultado en el Historial.</p></div>';
+      return;
+    }
+    if (estadisticasFiltro !== 'grupo' && !usuarios.includes(estadisticasFiltro)) estadisticasFiltro = 'grupo';
+
+    const datoDe = (k) => (estadisticasFiltro === 'grupo' ? stats[k].total : stats[k].porUsuario[estadisticasFiltro]);
+    const global = comps.reduce((a, [k]) => ({ aciertos: a.aciertos + datoDe(k).aciertos, n: a.n + datoDe(k).n }), { aciertos: 0, n: 0 });
+    const conDatos = comps.filter(([k]) => datoDe(k).n >= POCOS_DATOS);
+    const orden = [...conDatos].sort((a, b) => pct(datoDe(b[0])) - pct(datoDe(a[0])));
+    const mejor = orden[0];
+    const peor = orden.length > 1 ? orden[orden.length - 1] : null;
+    const quien = estadisticasFiltro === 'grupo' ? 'del grupo' : `de ${escapeHtml(estadisticasFiltro)}`;
+
+    const tiles = `
+      <div class="stats-tiles">
+        <div class="stats-tile"><span class="stats-tile-label">Acierto global ${quien}</span><span class="stats-tile-valor">${pct(global) ?? '—'}%</span><span class="stats-tile-sub">${global.aciertos} de ${global.n} pronósticos</span></div>
+        ${mejor ? `<div class="stats-tile"><span class="stats-tile-label">Donde mejor ${estadisticasFiltro === 'grupo' ? 'se nos da' : 'se le da'}</span><span class="stats-tile-valor">${mejor[1]}</span><span class="stats-tile-sub">${pct(datoDe(mejor[0]))}% de acierto</span></div>` : ''}
+        ${peor ? `<div class="stats-tile"><span class="stats-tile-label">Donde peor</span><span class="stats-tile-valor">${peor[1]}</span><span class="stats-tile-sub">${pct(datoDe(peor[0]))}% de acierto</span></div>` : ''}
+      </div>
+    `;
+
+    const filtros = `
+      <div class="user-tabs stats-filtro" role="tablist">
+        ${['grupo', ...usuarios].map((u) => `<button type="button" data-filtro="${escapeHtml(u)}" class="${u === estadisticasFiltro ? 'active' : ''}">${u === 'grupo' ? 'Todo el grupo' : escapeHtml(u)}</button>`).join('')}
+      </div>
+    `;
+
+    const barras = comps.map(([k, nombre]) => {
+      const d = datoDe(k);
+      const p = pct(d);
+      const pocos = d.n < POCOS_DATOS;
+      return `
+        <div class="stats-barra-fila${pocos ? ' pocos' : ''}" title="${nombre}: ${d.aciertos} aciertos de ${d.n} pronósticos (${stats[k].partidos} partidos)">
+          <span class="stats-barra-nombre">${nombre}</span>
+          <span class="stats-barra-pista">${p === null ? '' : `<span class="stats-barra" style="width:${p}%"></span>`}</span>
+          <span class="stats-barra-valor">${p === null ? '—' : `${p}%`}<small>${d.aciertos}/${d.n}${pocos ? ' · pocos datos' : ''}</small></span>
+        </div>
+      `;
+    }).join('');
+
+    // Tabla competicion x usuario: fondo verde mas intenso cuanto mas acierto
+    const celda = (d) => {
+      const p = pct(d);
+      if (p === null) return '<td class="stats-celda vacia">—</td>';
+      const mezcla = Math.round(p * 0.85);
+      const oscuro = mezcla >= 55;
+      return `<td class="stats-celda${d.n < POCOS_DATOS ? ' pocos' : ''}" style="background:color-mix(in srgb, var(--primary-dark) ${mezcla}%, #ffffff);color:${oscuro ? '#fff' : 'var(--text)'}" title="${d.aciertos} de ${d.n}">${p}%<small>${d.aciertos}/${d.n}</small></td>`;
+    };
+    const filasTabla = comps.map(([k, nombre]) => {
+      const mejorP = Math.max(...usuarios.map((u) => pct(stats[k].porUsuario[u]) ?? -1));
+      const reyes = usuarios.filter((u) => stats[k].total.n && pct(stats[k].porUsuario[u]) === mejorP && mejorP >= 0);
+      return `
+        <tr>
+          <th scope="row">${nombre}<small>${stats[k].partidos} partidos</small></th>
+          ${usuarios.map((u) => celda(stats[k].porUsuario[u])).join('')}
+          ${celda(stats[k].total)}
+          <td class="stats-rey">${reyes.length && reyes.length < usuarios.length ? `👑 ${reyes.map(escapeHtml).join(', ')}` : ''}</td>
+        </tr>
+      `;
+    }).join('');
+
+    cont.innerHTML = `
+      <p class="resultados-todos-hint">Sobre las ${jornadas.length} jornada${jornadas.length === 1 ? '' : 's'} del Historial, solo los 14 partidos (el Pleno al 15 no cuenta). El % es sobre los partidos con resultado en los que hubo pronóstico. Con menos de ${POCOS_DATOS} pronósticos se marca "pocos datos".</p>
+      ${filtros}
+      ${tiles}
+      <section class="stats-seccion">
+        <h3>% de acierto por competición ${estadisticasFiltro === 'grupo' ? '(todo el grupo)' : `(${escapeHtml(estadisticasFiltro)})`}</h3>
+        <div class="stats-barras">${barras}</div>
+      </section>
+      <section class="stats-seccion">
+        <h3>Cada uno en cada competición</h3>
+        <div class="resultados-todos-tabla-scroll">
+          <table class="stats-tabla">
+            <thead><tr><th>Competición</th>${usuarios.map((u) => `<th>${escapeHtml(u)}</th>`).join('')}<th>Grupo</th><th>Mejor</th></tr></thead>
+            <tbody>${filasTabla}</tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }
+
+  $('#estadisticas-contenido').addEventListener('click', (e) => {
+    const boton = e.target.closest('[data-filtro]');
+    if (!boton) return;
+    estadisticasFiltro = boton.dataset.filtro;
+    pintarEstadisticas();
+  });
 
   function rankingAciertos(usuarios, jornadas) {
     const filas = usuarios.map((username) => {

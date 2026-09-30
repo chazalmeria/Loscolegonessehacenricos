@@ -119,6 +119,11 @@ const MIGRACIONES = [
   // sus pronosticos estan congelados, pero sigue en la pestaña Jornada (encima
   // de la nueva) hasta tener todos los resultados y los premios.
   'ALTER TABLE jornadas ADD COLUMN en_juego INTEGER NOT NULL DEFAULT 0',
+  // Competicion del partido para Estadisticas (ver server/competiciones.js):
+  // primera, segunda, femenino, selecciones, europa, copa u otras. division es
+  // el codigo que da Losilla, por si hay que reclasificar.
+  'ALTER TABLE partidos ADD COLUMN division INTEGER',
+  'ALTER TABLE partidos ADD COLUMN competicion TEXT',
   // Evita crear dos veces la misma jornada si dos peticiones sincronizan a la vez
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_jornadas_draw_id ON jornadas(draw_id)',
 ];
