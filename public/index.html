@@ -43,7 +43,10 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <span class="logo">⚽ Quiniela</span>
-        <span id="usuario-actual" class="usuario-actual"></span>
+        <span class="usuario-actual-fila">
+          <span id="avatar-actual"></span>
+          <span id="usuario-actual" class="usuario-actual"></span>
+        </span>
       </div>
       <nav class="sidebar-nav">
         <button class="nav-item active" data-tab="inicio">Inicio</button>
@@ -53,8 +56,38 @@
         <button class="nav-item" data-tab="rankings">Rankings</button>
         <button class="nav-item" data-tab="estadisticas">Estadisticas</button>
       </nav>
-      <button id="btn-logout" class="btn btn-ghost btn-logout">Cerrar sesión</button>
+      <div class="sidebar-pie">
+        <button id="btn-ajustes" class="btn btn-ghost">⚙️ Ajustes</button>
+        <button id="btn-logout" class="btn btn-ghost">Cerrar sesión</button>
+      </div>
     </aside>
+
+    <!-- AJUSTES: foto de perfil -->
+    <dialog id="dialog-ajustes" class="dialog-ajustes">
+      <form method="dialog" class="ajustes-card">
+        <div class="tab-header-row">
+          <h3>⚙️ Ajustes</h3>
+          <button type="submit" class="btn-cerrar" aria-label="Cerrar">✕</button>
+        </div>
+        <h4>Foto de perfil</h4>
+        <div class="ajustes-foto">
+          <div id="ajustes-preview" class="ajustes-preview"></div>
+          <div class="ajustes-foto-acciones">
+            <label class="btn btn-ghost btn-small ajustes-elegir">
+              📷 Elegir foto
+              <input id="ajustes-archivo" type="file" accept="image/*" hidden />
+            </label>
+            <button type="button" id="btn-quitar-foto" class="btn-link peligro">Quitar foto</button>
+          </div>
+        </div>
+        <p class="resultados-todos-hint">Se recorta en cuadrado y se reduce automáticamente. La verán todos en el chat y en las encuestas.</p>
+        <p id="ajustes-error" class="error-msg" hidden></p>
+        <div class="ajustes-botones">
+          <button type="submit" class="btn btn-ghost btn-small">Cancelar</button>
+          <button type="button" id="btn-guardar-foto" class="btn btn-primary btn-small" disabled>Guardar foto</button>
+        </div>
+      </form>
+    </dialog>
 
     <main class="content">
 

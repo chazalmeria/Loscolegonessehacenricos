@@ -87,9 +87,13 @@
     $('#usuario-actual').textContent = currentUser;
     showScreen('home');
     reiniciarChat();
-    cargarChat();
+    // Primero las fotos, para que el chat y las encuestas ya salgan con ellas
+    cargarAvatares().finally(() => {
+      $('#avatar-actual').innerHTML = htmlAvatar(currentUser, 'avatar avatar-mini');
+      cargarChat();
+      cargarEncuestas();
+    });
     iniciarSondeoChat();
-    cargarEncuestas();
     cargarJornada();
     cargarHistorial();
     cargarEconomia();
@@ -117,8 +121,33 @@
     for (const c of String(nombre)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
     return COLORES_AVATAR[h % COLORES_AVATAR.length];
   }
+  // Foto de perfil si la tiene (Ajustes); si no, la inicial sobre su color
+  let versionesAvatar = {}; // usuario -> version de su foto (o null)
+  function urlAvatar(nombre) {
+    const v = versionesAvatar[nombre];
+    return v ? `/api/usuarios/${encodeURIComponent(nombre)}/avatar?v=${v}` : null;
+  }
   function htmlAvatar(nombre, clase = 'avatar') {
-    return `<span class="${clase}" style="background:${colorDe(nombre)}" title="${escapeHtml(nombre)}">${escapeHtml(String(nombre).charAt(0).toUpperCase())}</span>`;
+    const url = urlAvatar(nombre);
+    const comun = `class="${clase}" data-avatar-de="${escapeHtml(nombre)}" data-avatar-clase="${clase}" title="${escapeHtml(nombre)}"`;
+    if (url) return `<img ${comun} src="${url}" alt="${escapeHtml(nombre)}" />`;
+    return `<span ${comun} style="background:${colorDe(nombre)}">${escapeHtml(String(nombre).charAt(0).toUpperCase())}</span>`;
+  }
+
+  // Trae las versiones de las fotos y repinta los avatares de quien la haya cambiado
+  async function cargarAvatares() {
+    try {
+      const { avatares } = await api('/api/usuarios/avatares');
+      const cambiados = Object.keys(avatares).filter((u) => avatares[u] !== (versionesAvatar[u] ?? null));
+      versionesAvatar = avatares;
+      for (const u of cambiados) refrescarAvatares(u);
+    } catch (e) { /* ignore */ }
+  }
+  function refrescarAvatares(usuario) {
+    $$('[data-avatar-de]').forEach((el) => {
+      if (el.dataset.avatarDe === usuario) el.outerHTML = htmlAvatar(usuario, el.dataset.avatarClase);
+    });
+    if (usuario === currentUser) $('#avatar-actual').innerHTML = htmlAvatar(currentUser, 'avatar avatar-mini');
   }
 
   // Estado para agrupar mensajes seguidos del mismo autor y separar por dias
@@ -208,6 +237,8 @@
       cargarChat();
       // Las encuestas se refrescan cada 3 vueltas (12 s), salvo si estas creando una
       if (++ticksChat % 3 === 0 && $('#form-encuesta').hidden) cargarEncuestas();
+      // Y las fotos de perfil de los demas, cada minuto
+      if (ticksChat % 15 === 0) cargarAvatares();
     }, 4000);
   }
 
@@ -222,6 +253,118 @@
     input.focus();
     const pos = ini + boton.dataset.emoji.length;
     input.setSelectionRange(pos, pos);
+  });
+
+  // ---------- AJUSTES: foto de perfil ----------
+  const TAM_FOTO = 256; // px del lado del cuadrado que se guarda
+  let fotoPendiente = null; // data URL lista para subir
+
+  function pintarPreviewAjustes(url) {
+    $('#ajustes-preview').innerHTML = url
+      ? `<img src="${url}" alt="Tu foto" />`
+      : `<span class="ajustes-preview-inicial" style="background:${colorDe(currentUser)}">${escapeHtml(currentUser.charAt(0).toUpperCase())}</span>`;
+    $('#btn-quitar-foto').hidden = !versionesAvatar[currentUser] || !!fotoPendiente;
+  }
+
+  function errorAjustes(msg) {
+    const el = $('#ajustes-error');
+    el.textContent = msg || '';
+    el.hidden = !msg;
+  }
+
+  $('#btn-ajustes').addEventListener('click', () => {
+    fotoPendiente = null;
+    $('#ajustes-archivo').value = '';
+    $('#btn-guardar-foto').disabled = true;
+    errorAjustes('');
+    pintarPreviewAjustes(urlAvatar(currentUser));
+    $('#dialog-ajustes').showModal();
+  });
+
+  // Recorta al cuadrado central, reduce a TAM_FOTO y lo pasa a JPEG
+  function cargarImagen(archivo) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(archivo);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('No se ha podido leer esa imagen. Prueba con una JPG o PNG.'));
+      };
+      img.src = url;
+    });
+  }
+
+  function recortarFoto(img) {
+    const lado = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = TAM_FOTO;
+    canvas.height = TAM_FOTO;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; // fondo para PNG con transparencia
+    ctx.fillRect(0, 0, TAM_FOTO, TAM_FOTO);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, (img.naturalWidth - lado) / 2, (img.naturalHeight - lado) / 2, lado, lado, 0, 0, TAM_FOTO, TAM_FOTO);
+    // Baja la calidad si hiciera falta para no pasar de ~150 kB
+    let calidad = 0.85;
+    let dataUrl = canvas.toDataURL('image/jpeg', calidad);
+    while (dataUrl.length > 200000 && calidad > 0.4) {
+      calidad -= 0.1;
+      dataUrl = canvas.toDataURL('image/jpeg', calidad);
+    }
+    return dataUrl;
+  }
+
+  $('#ajustes-archivo').addEventListener('change', async (e) => {
+    const archivo = e.target.files && e.target.files[0];
+    if (!archivo) return;
+    errorAjustes('');
+    try {
+      fotoPendiente = recortarFoto(await cargarImagen(archivo));
+      pintarPreviewAjustes(fotoPendiente);
+      $('#btn-guardar-foto').disabled = false;
+    } catch (err) {
+      fotoPendiente = null;
+      $('#btn-guardar-foto').disabled = true;
+      errorAjustes(err.message);
+    }
+  });
+
+  $('#btn-guardar-foto').addEventListener('click', async () => {
+    if (!fotoPendiente) return;
+    const boton = $('#btn-guardar-foto');
+    boton.disabled = true;
+    boton.textContent = 'Guardando…';
+    try {
+      const { avatar_v: version } = await api('/api/usuarios/me/avatar', {
+        method: 'POST',
+        body: JSON.stringify({ imagen: fotoPendiente }),
+      });
+      versionesAvatar[currentUser] = version;
+      refrescarAvatares(currentUser);
+      fotoPendiente = null;
+      $('#dialog-ajustes').close();
+    } catch (err) {
+      errorAjustes(err.message);
+      boton.disabled = false;
+    } finally {
+      boton.textContent = 'Guardar foto';
+    }
+  });
+
+  $('#btn-quitar-foto').addEventListener('click', async () => {
+    if (!confirm('¿Quitar tu foto de perfil?')) return;
+    try {
+      await api('/api/usuarios/me/avatar', { method: 'DELETE' });
+      versionesAvatar[currentUser] = null;
+      refrescarAvatares(currentUser);
+      pintarPreviewAjustes(null);
+    } catch (err) {
+      errorAjustes(err.message);
+    }
   });
 
   // ---------- ENCUESTAS (lateral derecho de Inicio) ----------

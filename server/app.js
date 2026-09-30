@@ -11,11 +11,13 @@ const historialRoutes = require('./routes/historial');
 const economiaRoutes = require('./routes/economia');
 const adminRoutes = require('./routes/admin');
 const encuestasRoutes = require('./routes/encuestas');
+const usuariosRoutes = require('./routes/usuarios');
 
 const app = express();
 app.set('trust proxy', 1); // necesario detras de un proxy (Vercel, Render, etc.)
 
-app.use(express.json());
+// 400 kB: las fotos de perfil llegan en base64 (normalmente unos 30-60 kB)
+app.use(express.json({ limit: '400kb' }));
 app.use(attachUser);
 
 // Se asegura de que las tablas existan (y los 7 usuarios esten sembrados)
@@ -36,6 +38,7 @@ app.use('/api/historial', historialRoutes);
 app.use('/api/economia', economiaRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/encuestas', encuestasRoutes);
+app.use('/api/usuarios', usuariosRoutes);
 
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next();

@@ -8,6 +8,7 @@ App privada para el grupo: portada con acceso restringido, login compartido, cha
 
 - **Portada**: "Si no eres colegón o eres usero, no eres bienvenido" + botón de Login.
 - **Login**: 7 usuarios fijos (Burgos, Paquero, Jordan, Pepe, Largo, Joaquin, Miguel), todos con la contraseña `MaximianoGuapo`.
+- **Ajustes** (botón ⚙️ del menú): cada uno pone o quita su foto de perfil. El navegador la recorta en cuadrado y la reduce a 256 px antes de subirla; se guarda en la base de datos y sale en el chat, las encuestas y el menú.
 - **Estadísticas**: % de acierto por competición (Primera, Segunda, Femenino, Selecciones, Europa, Copa, Otras ligas), del grupo o de cada uno, y una tabla competición × usuario con el mejor de cada una. Sobre las jornadas del Historial y solo los 14 partidos. La competición de cada partido la calcula `server/competiciones.js` con los nombres y el código de división de Eduardo Losilla; las jornadas antiguas se completan solas, unas pocas en cada sincronización.
 - **Inicio**: "El Vestuario", el chat entre todos los usuarios logueados (se actualiza solo cada 4 segundos), con avatares de colores, separadores por día y emojis rápidos. En el lateral derecho, **Encuestas**: cualquiera crea una (pregunta + 2 a 6 opciones), cada uno vota una opción y puede cambiarla o quitarla (pulsando otra vez), y se ve quién ha votado qué. Solo quien la crea puede cerrarla (ya no admite votos) o borrarla. Al crear una sale un aviso en el chat.
 - **Jornada**: la jornada de La Quiniela llega sola desde la API pública de Eduardo Losilla (15 partidos + Pleno al 15) y cada usuario rellena su propia columna de pronósticos (1 / X / 2). Se ve quién ha completado ya su quiniela. Si la API falla, el botón "Crear jornada manualmente" crea otra jornada que aparece encima de la de la API, con su título y la etiqueta "(a mano)", y que se pasa al Historial con "Añadir al histórico".
@@ -132,6 +133,7 @@ quiniela-colegas/
 │       ├── auth.js         # login / logout / usuario actual
 │       ├── chat.js         # mensajes del chat (sondeo periodico)
 │       ├── encuestas.js    # encuestas del lateral del chat
+│       ├── usuarios.js     # fotos de perfil (Ajustes)
 │       ├── jornada.js      # partidos de la semana + pronosticos
 │       ├── historial.js    # pronosticos pasados por usuario
 │       ├── economia.js     # saldo de cada uno en el bote comun (a mano)

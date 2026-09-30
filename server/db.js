@@ -122,6 +122,10 @@ const MIGRACIONES = [
   // Competicion del partido para Estadisticas (ver server/competiciones.js):
   // primera, segunda, femenino, selecciones, europa, copa u otras. division es
   // el codigo que da Losilla, por si hay que reclasificar.
+  // Foto de perfil (Ajustes): JPEG cuadrado pequeño en base64 y una version
+  // (timestamp) para que el navegador la cachee y la recargue al cambiarla
+  'ALTER TABLE users ADD COLUMN avatar TEXT',
+  'ALTER TABLE users ADD COLUMN avatar_v INTEGER',
   'ALTER TABLE partidos ADD COLUMN division INTEGER',
   'ALTER TABLE partidos ADD COLUMN competicion TEXT',
   // Evita crear dos veces la misma jornada si dos peticiones sincronizan a la vez
