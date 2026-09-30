@@ -7,11 +7,13 @@ const { requireAuth, USERS } = require('../auth');
 const router = express.Router();
 
 // Jornadas abiertas (activa = 1): las creadas a mano primero (mas nueva
-// arriba) y despues las de la API de la mas antigua a la mas nueva, para que
-// la que se esta jugando (en juego) quede encima de la siguiente.
+// arriba) y despues las de la API por fecha, de la mas antigua a la mas nueva,
+// para que la que se esta jugando (en juego) quede encima de la siguiente
+// aunque se haya creado despues (p. ej. importada a mano).
 async function getJornadasAbiertas() {
   return db.all(
-    'SELECT * FROM jornadas WHERE activa = 1 ORDER BY manual DESC, CASE WHEN manual = 1 THEN -id ELSE id END'
+    `SELECT * FROM jornadas WHERE activa = 1
+     ORDER BY manual DESC, CASE WHEN manual = 1 THEN -id ELSE 0 END, draw_date, id`
   );
 }
 
